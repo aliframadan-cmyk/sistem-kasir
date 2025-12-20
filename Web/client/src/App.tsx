@@ -1,265 +1,269 @@
-import React, { useEffect, useState } from 'react';
-import axios from 'axios';
-import { ShoppingCart, Trash2, Plus, Minus, Search, Package, RefreshCw, AlertCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { 
+  LayoutGrid, ShoppingCart, Package, History, Search, Plus, 
+  Trash2, X, CheckCircle2, ReceiptText, AlertCircle
+} from 'lucide-react';
 
-// --- DEFINISI TIPE DATA ---
-interface Product {
+// --- Interfaces ---
+interface Produk {
   id: number;
-  name: string;
-  category: string;
-  stockPcs: number;
-  qtyPerDus: number;
-  pricePcs: number;
-  priceDus: number;
+  nama: string;
+  kategori: string;
+  stok: number;
+  hargaEcer: number;
 }
 
-interface CartItem extends Product {
-  cartId: number;
+interface ItemKeranjang extends Produk {
   qty: number;
-  unit: string;
-  activePrice: number;
+  subtotal: number;
 }
 
-// --- SETUP API ---
-// Pastikan port 3000 sesuai dengan backend Anda
-const api = axios.create({ baseURL: 'http://localhost:3000/api' });
+interface HistoryTransaksi {
+  id: string;
+  tanggal: string;
+  items: ItemKeranjang[];
+  total: number;
+}
 
-// Format Rupiah
-const formatRupiah = (n: number) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(n);
+const App = () => {
+  // --- States ---
+  const [activeTab, setActiveTab] = useState<'pos' | 'inventory' | 'history'>('pos');
+  const [search, setSearch] = useState("");
+  const [keranjang, setKeranjang] = useState<ItemKeranjang[]>([]);
+  const [riwayat, setRiwayat] = useState<HistoryTransaksi[]>([]);
+  const [selectedHistory, setSelectedHistory] = useState<HistoryTransaksi | null>(null);
+  const [showEmptyWarning, setShowEmptyWarning] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
 
-export default function App() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [cart, setCart] = useState<CartItem[]>([]);
-  const [search, setSearch] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(false);
-  const [errorMsg, setErrorMsg] = useState<string>('');
+  // --- Data Produk Sembako ---
+  const [produkList, setProdukList] = useState<Produk[]>([
+    { id: 1, nama: "Beras Premium 5kg", kategori: "Sembako", stok: 20, hargaEcer: 75000 },
+    { id: 2, nama: "Minyak Goreng 2L", kategori: "Sembako", stok: 15, hargaEcer: 34000 },
+    { id: 3, nama: "Gula Pasir 1kg", kategori: "Sembako", stok: 50, hargaEcer: 16500 },
+    { id: 4, nama: "Telur Ayam 1kg", kategori: "Sembako", stok: 30, hargaEcer: 28000 },
+    { id: 5, nama: "Terigu Segitiga Biru", kategori: "Sembako", stok: 25, hargaEcer: 12000 },
+    { id: 6, nama: "Garam Dapur Beriodium", kategori: "Bumbu", stok: 100, hargaEcer: 3500 },
+    { id: 7, nama: "Kecap Manis 520ml", kategori: "Bumbu", stok: 20, hargaEcer: 22000 },
+    { id: 8, nama: "Sabun Cuci Piring", kategori: "Kebersihan", stok: 40, hargaEcer: 15000 },
+  ]);
 
-  // 1. LOAD PRODUK DARI SERVER
-  const loadProducts = () => {
-    setLoading(true);
-    api.get('/products')
-      .then(res => {
-        setProducts(res.data);
-        setErrorMsg('');
-      })
-      .catch((err) => {
-        console.error(err);
-        setErrorMsg("Gagal koneksi ke Backend. Pastikan terminal server jalan!");
-      })
-      .finally(() => setLoading(false));
+  // --- Logika POS ---
+  const tambahKeKeranjang = (produk: Produk) => {
+    if (produk.stok <= 0) return alert("Stok habis!");
+    const itemExist = keranjang.find(item => item.id === produk.id);
+    if (itemExist) {
+      setKeranjang(keranjang.map(item => 
+        item.id === produk.id ? { ...item, qty: item.qty + 1, subtotal: (item.qty + 1) * item.hargaEcer } : item
+      ));
+    } else {
+      setKeranjang([...keranjang, { ...produk, qty: 1, subtotal: produk.hargaEcer }]);
+    }
   };
 
-  useEffect(() => { loadProducts(); }, []);
+  const totalHarga = keranjang.reduce((acc, item) => acc + item.subtotal, 0);
 
-  // 2. TAMBAH KE KERANJANG
-  const addToCart = (p: Product) => {
-    if (p.stockPcs <= 0) {
-      alert("Stok Habis!");
+  const handleBayar = () => {
+    if (keranjang.length === 0) {
+      setShowEmptyWarning(true);
       return;
     }
-    
-    setCart(prev => {
-      // Cek apakah item sudah ada di keranjang dengan satuan 'Pcs'
-      const exist = prev.find(i => i.id === p.id && i.unit === 'Pcs');
-      if (exist) {
-        return prev.map(i => i.id === p.id && i.unit === 'Pcs' ? { ...i, qty: i.qty + 1 } : i);
-      }
-      // Tambah item baru
-      return [...prev, { 
-        ...p, 
-        cartId: Date.now(), 
-        qty: 1, 
-        unit: 'Pcs', 
-        activePrice: p.pricePcs 
-      }];
-    });
-  };
-
-  // 3. UPDATE DATA KERANJANG (Ganti Satuan & Harga)
-  const updateUnit = (cartId: number, unit: string) => {
-    setCart(prev => prev.map(item => {
-      if (item.cartId === cartId) {
-        return { 
-          ...item, 
-          unit, 
-          // Logika Inti Grosir: Harga berubah otomatis
-          activePrice: unit === 'Dus' ? item.priceDus : item.pricePcs 
-        };
-      }
-      return item;
+    const transaksiBaru = {
+      id: `TRX-${Math.floor(1000 + Math.random() * 9000)}`,
+      tanggal: new Date().toLocaleString('id-ID'),
+      items: [...keranjang],
+      total: totalHarga
+    };
+    setProdukList(produkList.map(p => {
+      const itemInCart = keranjang.find(i => i.id === p.id);
+      return itemInCart ? { ...p, stok: p.stok - itemInCart.qty } : p;
     }));
+    setRiwayat([transaksiBaru, ...riwayat]);
+    setKeranjang([]);
+    setShowSuccess(true);
   };
 
-  const updateQty = (cartId: number, delta: number) => {
-    setCart(prev => prev.map(item => item.cartId === cartId ? { ...item, qty: Math.max(1, item.qty + delta) } : item));
-  };
-
-  const removeFromCart = (id: number) => setCart(prev => prev.filter(i => i.cartId !== id));
-  
-  const grandTotal = cart.reduce((sum, item) => sum + (item.activePrice * item.qty), 0);
-
-  // 4. CHECKOUT (BAYAR)
-  const handleCheckout = async () => {
-    if (cart.length === 0) return;
-    if (!window.confirm(`Total Rp ${grandTotal.toLocaleString()}. Proses transaksi?`)) return;
-
-    setLoading(true);
-    try {
-      await api.post('/checkout', {
-        customerType: 'Umum', 
-        total: grandTotal,
-        items: cart.map(i => ({ 
-            id: i.id, 
-            name: i.name, 
-            qty: i.qty, 
-            unit: i.unit, 
-            price: i.activePrice 
-        }))
-      });
-      
-      alert('✅ Transaksi Berhasil! Stok telah berkurang.');
-      setCart([]);    
-      loadProducts(); // Refresh stok
-    } catch (err: any) {
-      const message = err.response?.data?.error || err.message;
-      alert('❌ Gagal: ' + message);
-    } finally {
-      setLoading(false);
+  // --- Fitur Hapus Riwayat ---
+  const hapusSatuRiwayat = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation(); // Agar modal detail tidak ikut terbuka
+    if (confirm("Hapus catatan transaksi ini?")) {
+      setRiwayat(riwayat.filter(item => item.id !== id));
     }
   };
 
-  // Filter pencarian
-  const filtered = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+  const hapusSemuaRiwayat = () => {
+    if (confirm("Anda yakin ingin menghapus SEMUA riwayat transaksi? Tindakan ini tidak bisa dibatalkan.")) {
+      setRiwayat([]);
+    }
+  };
 
   return (
-    <div className="flex h-screen bg-gray-100 font-sans text-gray-800">
-      
-      {/* --- KOLOM KIRI: DAFTAR PRODUK --- */}
-      <div className="flex-1 flex flex-col overflow-hidden border-r border-gray-200">
-        <div className="bg-white p-4 shadow-sm z-10 flex justify-between items-center">
-          <h1 className="text-xl font-bold flex items-center gap-2 text-emerald-700">
-            <Package className="text-emerald-600"/> Kasir Grosir
-          </h1>
-          
-          {errorMsg && (
-            <div className="bg-red-100 text-red-700 px-4 py-2 rounded text-sm flex items-center gap-2">
-              <AlertCircle size={16}/> {errorMsg}
-            </div>
-          )}
+    <div className="flex h-screen bg-[#F8FAFC] font-sans overflow-hidden">
+      {/* SIDEBAR */}
+      <aside className="w-20 bg-[#0F172A] flex flex-col items-center py-6 gap-4">
+        <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center text-white mb-6 shadow-lg shadow-blue-900/20"><Package size={28} /></div>
+        <nav className="flex flex-col gap-4">
+          <button onClick={() => setActiveTab('pos')} className={`p-3 rounded-xl transition-all ${activeTab === 'pos' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-400 hover:text-white'}`}><ShoppingCart size={24}/></button>
+          <button onClick={() => setActiveTab('inventory')} className={`p-3 rounded-xl transition-all ${activeTab === 'inventory' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-400 hover:text-white'}`}><LayoutGrid size={24}/></button>
+          <button onClick={() => setActiveTab('history')} className={`p-3 rounded-xl transition-all ${activeTab === 'history' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-400 hover:text-white'}`}><History size={24}/></button>
+        </nav>
+      </aside>
 
-          <div className="flex gap-2">
-            <button onClick={loadProducts} className="p-2 bg-gray-100 rounded-full hover:bg-gray-200" title="Refresh Stok">
-                <RefreshCw size={18} className={loading ? 'animate-spin' : ''}/>
-            </button>
-            <div className="relative">
-                <Search className="absolute left-3 top-2.5 text-gray-400" size={18}/>
-                <input 
-                    placeholder="Cari barang..." 
-                    className="border rounded-full pl-10 pr-4 py-2 w-64 bg-gray-50 focus:outline-emerald-500 transition-all"
-                    onChange={e => setSearch(e.target.value)}
-                />
+      <div className="flex-1 flex overflow-hidden">
+        <main className="flex-1 overflow-y-auto p-8">
+          <div className="flex justify-between items-center mb-8">
+            <h1 className="text-3xl font-black text-slate-800 uppercase tracking-tight">
+              {activeTab === 'pos' ? 'Kasir Sembako' : activeTab === 'inventory' ? 'Stok Barang' : 'Riwayat Penjualan'}
+            </h1>
+            <div className="relative w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
+              <input type="text" placeholder="Cari..." className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500" onChange={(e) => setSearch(e.target.value)}/>
             </div>
           </div>
-        </div>
-        
-        <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
-          {products.length === 0 && !loading && !errorMsg && (
-            <div className="text-center text-gray-400 mt-20">
-              <p className="font-bold">Data Produk Kosong.</p>
-              <p className="text-sm">Pastikan backend server sudah di-seed.</p>
-            </div>
-          )}
 
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 pb-20">
-            {filtered.map(p => (
-              <div key={p.id} onClick={() => addToCart(p)} className="bg-white p-4 rounded-xl shadow-sm hover:shadow-lg cursor-pointer border border-transparent hover:border-emerald-500 transition-all group relative">
-                <div className="flex justify-between mb-2">
-                  <span className="text-[10px] font-bold bg-gray-100 px-2 py-1 rounded text-gray-600 uppercase">{p.category}</span>
-                  <span className={`text-[10px] font-bold ${p.stockPcs < 20 ? 'text-red-500' : 'text-green-600'}`}>
-                    Stok: {p.stockPcs}
-                  </span>
-                </div>
-                <h3 className="font-bold text-gray-800 mb-2 leading-tight h-10 line-clamp-2">{p.name}</h3>
-                
-                <div className="text-xs space-y-2 bg-gray-50 p-2 rounded">
-                  <div className="flex justify-between text-gray-500">
-                    <span>Ecer</span> 
-                    <span className="text-gray-900 font-bold">{formatRupiah(p.pricePcs)}</span>
-                  </div>
-                  <div className="flex justify-between text-emerald-700 font-medium border-t border-gray-200 pt-1">
-                    <span>Dus (x{p.qtyPerDus})</span> 
-                    <span>{formatRupiah(p.priceDus)}</span>
+          {/* POS VIEW */}
+          {activeTab === 'pos' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {produkList.filter(p => p.nama.toLowerCase().includes(search.toLowerCase())).map(p => (
+                <div key={p.id} onClick={() => tambahKeKeranjang(p)} className="bg-white p-6 rounded-[2rem] border border-slate-100 hover:border-blue-500 cursor-pointer transition-all group shadow-sm hover:shadow-xl">
+                  <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">{p.kategori}</span>
+                  <h3 className="text-lg font-bold text-slate-700 mt-1">{p.nama}</h3>
+                  <div className="flex justify-between items-end mt-4">
+                    <p className="text-blue-600 font-black text-xl">Rp {p.hargaEcer.toLocaleString('id-ID')}</p>
+                    <p className={`text-xs font-bold ${p.stok < 10 ? 'text-red-500' : 'text-slate-400'}`}>Stok: {p.stok}</p>
                   </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* --- KOLOM KANAN: KERANJANG --- */}
-      <div className="w-96 bg-white shadow-2xl flex flex-col z-20">
-        <div className="p-5 bg-emerald-50 border-b border-emerald-100 text-emerald-900">
-          <h2 className="font-bold text-lg flex items-center gap-2">
-            <ShoppingCart className="text-emerald-600"/> Keranjang
-          </h2>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-white">
-          {cart.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-64 text-gray-400 opacity-50">
-              <ShoppingCart size={48} className="mb-2"/>
-              <p>Keranjang Kosong</p>
+              ))}
             </div>
           )}
-          
-          {cart.map(item => (
-            <div key={item.cartId} className="border border-gray-100 p-3 rounded-lg relative group hover:bg-emerald-50 transition-colors shadow-sm">
-              <button onClick={() => removeFromCart(item.cartId)} className="absolute top-2 right-2 text-gray-300 hover:text-red-500 p-1">
-                <Trash2 size={16}/>
-              </button>
-              
-              <h4 className="font-bold text-sm w-4/5 mb-2 text-gray-800">{item.name}</h4>
-              
-              <div className="flex items-center justify-between">
-                {/* SELECTOR UNIT (Fitur Grosir) */}
-                <select 
-                  value={item.unit} 
-                  onChange={e => updateUnit(item.cartId, e.target.value)}
-                  className="bg-white border border-gray-300 text-xs rounded px-2 py-1 font-bold text-emerald-700 outline-none cursor-pointer focus:border-emerald-500"
-                >
-                  <option value="Pcs">Pcs</option>
-                  <option value="Dus">Dus</option>
-                </select>
 
-                <div className="flex items-center bg-white border border-gray-200 rounded overflow-hidden">
-                  <button onClick={() => updateQty(item.cartId, -1)} className="px-2 py-1 hover:bg-gray-100 text-gray-500"><Minus size={12}/></button>
-                  <span className="px-3 text-sm font-bold text-gray-800 w-8 text-center">{item.qty}</span>
-                  <button onClick={() => updateQty(item.cartId, 1)} className="px-2 py-1 hover:bg-gray-100 text-gray-500"><Plus size={12}/></button>
-                </div>
-              </div>
-              
-              <div className="text-right font-bold text-sm mt-2 text-gray-800">
-                {formatRupiah(item.activePrice * item.qty)}
-              </div>
+          {/* INVENTORY VIEW */}
+          {activeTab === 'inventory' && (
+            <div className="bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm">
+              <table className="w-full text-left">
+                <thead className="bg-slate-50 text-slate-400 text-[11px] uppercase font-bold tracking-widest">
+                  <tr><th className="px-8 py-5">Barang</th><th className="px-8 py-5 text-center">Tersedia</th><th className="px-8 py-5 text-right">Harga</th></tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {produkList.map(p => (
+                    <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-8 py-5 font-bold text-slate-700">{p.nama}</td>
+                      <td className="px-8 py-5 text-center font-bold text-blue-600">{p.stok}</td>
+                      <td className="px-8 py-5 text-right font-black">Rp {p.hargaEcer.toLocaleString('id-ID')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          ))}
-        </div>
+          )}
 
-        <div className="p-5 border-t border-gray-100 bg-gray-50">
-          <div className="flex justify-between text-xl font-bold mb-4 text-gray-800">
-            <span>Total</span>
-            <span className="text-emerald-600">{formatRupiah(grandTotal)}</span>
-          </div>
-          <button 
-            onClick={handleCheckout} 
-            disabled={loading || cart.length === 0}
-            className="w-full bg-emerald-600 text-white py-3 rounded-xl font-bold hover:bg-emerald-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-all shadow-lg shadow-emerald-200 flex justify-center items-center gap-2"
-          >
-            {loading ? 'Memproses...' : 'Bayar Sekarang'}
-          </button>
-        </div>
+          {/* HISTORY VIEW DENGAN FITUR HAPUS */}
+          {activeTab === 'history' && (
+            <div className="space-y-4 max-w-4xl">
+              {riwayat.length > 0 && (
+                <button onClick={hapusSemuaRiwayat} className="flex items-center gap-2 text-red-500 font-bold text-sm hover:bg-red-50 px-4 py-2 rounded-lg transition-all ml-auto">
+                  <Trash2 size={16}/> Hapus Semua Riwayat
+                </button>
+              )}
+              {riwayat.length === 0 ? (
+                <div className="text-center py-20 bg-white rounded-[2rem] border-2 border-dashed border-slate-200">
+                  <AlertCircle className="mx-auto text-slate-200 mb-4" size={48}/>
+                  <p className="text-slate-400 font-bold">Belum ada riwayat transaksi</p>
+                </div>
+              ) : (
+                riwayat.map(h => (
+                  <div key={h.id} onClick={() => setSelectedHistory(h)} className="group bg-white p-5 rounded-2xl border border-slate-100 flex justify-between items-center hover:border-blue-500 cursor-pointer shadow-sm">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 bg-blue-50 text-blue-600 rounded-xl"><ReceiptText/></div>
+                      <div><p className="font-bold text-slate-800">{h.id}</p><p className="text-xs text-slate-400 font-medium">{h.tanggal}</p></div>
+                    </div>
+                    <div className="flex items-center gap-6">
+                      <p className="font-black text-blue-600 text-lg">Rp {h.total.toLocaleString('id-ID')}</p>
+                      <button onClick={(e) => hapusSatuRiwayat(e, h.id)} className="p-2 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={20}/></button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </main>
+
+        {/* CART SIDEBAR (Hanya di POS) */}
+        {activeTab === 'pos' && (
+          <aside className="w-96 bg-white border-l border-slate-100 p-8 flex flex-col shadow-2xl shadow-slate-200/50">
+            <h2 className="text-2xl font-black text-slate-800 mb-8 flex items-center gap-2"><ShoppingCart className="text-blue-600"/> Pesanan</h2>
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+              {keranjang.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-slate-200">
+                  <ShoppingCart size={64} className="mb-4 opacity-20"/>
+                  <p className="font-bold italic">Belum ada barang</p>
+                </div>
+              ) : (
+                keranjang.map(item => (
+                  <div key={item.id} className="flex justify-between items-start bg-slate-50 p-4 rounded-2xl group border border-transparent hover:border-blue-100">
+                    <div>
+                      <p className="font-bold text-sm text-slate-700">{item.nama}</p>
+                      <p className="text-xs text-slate-400 font-bold">{item.qty} x Rp {item.hargaEcer.toLocaleString('id-ID')}</p>
+                    </div>
+                    <button onClick={() => setKeranjang(keranjang.filter(i => i.id !== item.id))} className="text-red-400 hover:text-red-600 transition-all"><X size={16}/></button>
+                  </div>
+                ))
+              )}
+            </div>
+            <div className="pt-6 border-t border-dashed border-slate-200 mt-6 space-y-4">
+              <div className="flex justify-between items-end"><span className="font-bold text-slate-400 text-sm">TOTAL</span><span className="text-3xl font-black text-blue-600 tracking-tighter">Rp {totalHarga.toLocaleString('id-ID')}</span></div>
+              <button onClick={handleBayar} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black shadow-xl shadow-blue-500/20 active:scale-95 transition-all">BAYAR SEKARANG</button>
+            </div>
+          </aside>
+        )}
       </div>
+
+      {/* --- POPUP KERANJANG KOSONG --- */}
+      {showEmptyWarning && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[100] p-4">
+          <div className="bg-white w-full max-w-sm rounded-[3rem] p-10 shadow-2xl text-center">
+            <div className="w-20 h-20 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-amber-100"><ShoppingCart size={40} /></div>
+            <h2 className="text-2xl font-black text-slate-800 mb-2">Oops! Keranjang Kosong</h2>
+            <p className="text-slate-500 text-sm mb-8 font-medium">Pilih sembako terlebih dahulu sebelum lanjut ke pembayaran.</p>
+            <button onClick={() => setShowEmptyWarning(false)} className="w-full bg-[#14B8A6] text-white py-4 rounded-2xl font-black uppercase shadow-lg shadow-teal-500/20">OKE, SAYA MENGERTI</button>
+          </div>
+        </div>
+      )}
+
+      {/* --- POPUP SUKSES --- */}
+      {showSuccess && (
+        <div className="fixed inset-0 bg-blue-900/40 backdrop-blur-md flex items-center justify-center z-[100] p-4">
+          <div className="bg-white w-full max-w-sm rounded-[3rem] p-10 shadow-2xl text-center">
+            <div className="w-20 h-20 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-green-100"><CheckCircle2 size={40} /></div>
+            <h2 className="text-2xl font-black text-slate-800 mb-2">Berhasil!</h2>
+            <p className="text-slate-500 text-sm mb-8 font-medium">Stok sudah diperbarui dan transaksi tercatat.</p>
+            <button onClick={() => setShowSuccess(false)} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase shadow-lg shadow-blue-500/20">MANTAP!</button>
+          </div>
+        </div>
+      )}
+
+      {/* --- MODAL DETAIL --- */}
+      {selectedHistory && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 text-slate-800">
+          <div className="bg-white w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative">
+            <button onClick={() => setSelectedHistory(null)} className="absolute top-6 right-6 text-slate-300 hover:text-slate-600"><X size={24} /></button>
+            <h2 className="text-2xl font-black mb-6 flex items-center gap-2 text-slate-800 tracking-tight"><ReceiptText className="text-blue-600"/> Rincian Belanja</h2>
+            <div className="space-y-4 mb-8 max-h-60 overflow-y-auto pr-2">
+              {selectedHistory.items.map((item, i) => (
+                <div key={i} className="flex justify-between border-b border-slate-50 pb-3 text-sm font-medium">
+                  <span>{item.nama} <span className="text-slate-400">x{item.qty}</span></span>
+                  <span className="font-bold">Rp {item.subtotal.toLocaleString('id-ID')}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-between items-center bg-blue-50 p-5 rounded-2xl">
+              <span className="font-bold text-blue-400 uppercase text-[10px] tracking-widest">Total Bayar</span>
+              <span className="text-2xl font-black text-blue-600 tracking-tighter">Rp {selectedHistory.total.toLocaleString('id-ID')}</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-}
+};
+
+export default App;

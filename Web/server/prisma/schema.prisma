@@ -1,3 +1,5 @@
+// server/prisma/schema.prisma
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,24 +10,24 @@ datasource db {
 }
 
 model Product {
-  id          Int      @id @default(autoincrement())
-  name        String
-  category    String   @default("Umum")
-  stockPcs    Int      @default(0)
-  qtyPerDus   Int      @default(12)
-  pricePcs    Int
-  priceDus    Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  items       TransactionItem[]
+  id        Int               @id @default(autoincrement())
+  name      String
+  category  String            @default("Umum")
+  stockPcs  Int               @default(0)
+  qtyPerDus Int               @default(12)
+  pricePcs  Int
+  priceDus  Int
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  items     TransactionItem[]
 }
 
 model Transaction {
-  id           Int      @id @default(autoincrement())
-  invoiceNo    String   @unique
+  id           Int               @id @default(autoincrement())
+  invoiceNo    String            @unique
   total        Int
-  customerType String   @default("Umum")
-  createdAt    DateTime @default(now())
+  customerType String            @default("Umum")
+  createdAt    DateTime          @default(now())
   items        TransactionItem[]
 }
 

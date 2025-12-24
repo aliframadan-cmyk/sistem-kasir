@@ -47,7 +47,7 @@ const App = () => {
     { id: 3, nama: "Gula Pasir 1kg", kategori: "Sembako", stok: 50, hargaEcer: 16500, gambar: "https://p16-images-sign-sg.tokopedia-static.net/tos-alisg-i-aphluv4xwc-sg/img/VqbcmM/2021/6/1/8443e276-c835-46a7-b787-94cdd4c6d059.jpg~tplv-aphluv4xwc-white-pad-v1:1600:1600.jpeg?lk3s=0ccea506&x-expires=1766619340&x-signature=GLjdGsE1yCk1LF5EfV%2BX4souq94%3D&x-signature-webp=CYnEQLJfgwpcgTNt%2FGw%2BofoXdHY%3D"},
     { id: 4, nama: "Telur Ayam 1kg", kategori: "Sembako", stok: 30, hargaEcer: 28000, gambar: "https://siopen.balangankab.go.id/storage/merchant/products/2024/03/20/webp/3ebfc5fe07a6c589d85e268548e8dc66.webp" },
     { id: 5, nama: "Terigu Segitiga Biru", kategori: "Sembako", stok: 25, hargaEcer: 12000, gambar: "https://c.alfagift.id/product/1/1_A28090001915_20240508102544159_base.jpg" },
-    { id: 6, nama: "Garam Dapur Beriodium", kategori: "Bumbu", stok: 100, hargaEcer: 3500, gambar: "https://images.unsplash.com/photo-1610450534241-1f9532658428?w=400" },
+    { id: 6, nama: "Garam Dapur Beriodium", kategori: "Bumbu", stok: 100, hargaEcer: 3500, gambar: "https://www.static-src.com/wcsstore/Indraprastha/images/catalog/full//89/MTA-28327120/no-brand_no-brand_full01.jpg" },
     { id: 7, nama: "Kecap Manis 520ml", kategori: "Bumbu", stok: 20, hargaEcer: 22000, gambar: "https://images.unsplash.com/photo-1622359570138-02830206148a?q=80&w=400&auto=format&fit=crop" },
     { id: 8, nama: "Sabun Cuci Piring", kategori: "Kebersihan", stok: 40, hargaEcer: 15000, gambar: "https://images.unsplash.com/photo-1584622781564-1d9876a13d1e?q=80&w=400&auto=format&fit=crop" },
     { id: 9, nama: "Sampoerna Mild 16", kategori: "Rokok", stok: 50, hargaEcer: 35000, gambar: "https://images.unsplash.com/photo-1516062423079-7ca13cdc7f5a?w=400" },

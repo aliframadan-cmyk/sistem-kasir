@@ -53,7 +53,7 @@ const App = () => {
     { id: 9, nama: "Sampoerna Mild 16", kategori: "Rokok", stok: 50, hargaEcer: 35000, gambar: "https://mudeverse.mudev.id/wp-content/uploads/2025/06/product_lXGD4y51v.jpg" },
     { id: 10, nama: "Gudang Garam Filter 12", kategori: "Rokok", stok: 40, hargaEcer: 24000, gambar: "https://www.static-src.com/wcsstore/Indraprastha/images/catalog/full//86/MTA-34432241/gudang_garam_gudang_garam_filter_international_full01_jr2jhv5t.jpg" },
     { id: 11, nama: "Djarum 76 apel", kategori: "Rokok", stok: 30, hargaEcer: 17000, gambar: "https://www.static-src.com/wcsstore/Indraprastha/images/catalog/full/catalog-image/89/MTA-183102054/djarum_76_djarum_76_apel_rokok_kretek_12_-_skt_full03_ie65ropx.webp" },
-  ]);
+  ]); 
 
   // --- Logika POS ---
   const tambahKeKeranjang = (produk: Produk) => {

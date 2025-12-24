@@ -44,7 +44,7 @@ const App = () => {
   const [produkList, setProdukList] = useState<Produk[]>([
     { id: 1, nama: "Beras Premium 5kg", kategori: "Sembako", stok: 20, hargaEcer: 75000, gambar: "https://akcdn.detik.net.id/visual/2023/10/10/ilustrasi-beras_169.jpeg?w=750&q=90" },
     { id: 2, nama: "Minyak Goreng 2L", kategori: "Sembako", stok: 15, hargaEcer: 34000, gambar: "https://image.dailymartazzahra.com/s3/productimages/webp/co37129/p647771/w600-h600/68d96bd8-9169-4913-9306-e65cad8c5075.jpg"},
-    { id: 3, nama: "Gula Pasir 1kg", kategori: "Sembako", stok: 50, hargaEcer: 16500, gambar: "https://images.unsplash.com/photo-1581007871115-f14bc016e0a4?w=400"},
+    { id: 3, nama: "Gula Pasir 1kg", kategori: "Sembako", stok: 50, hargaEcer: 16500, gambar: "https://p16-images-sign-sg.tokopedia-static.net/tos-alisg-i-aphluv4xwc-sg/img/VqbcmM/2021/6/1/8443e276-c835-46a7-b787-94cdd4c6d059.jpg~tplv-aphluv4xwc-white-pad-v1:1600:1600.jpeg?lk3s=0ccea506&x-expires=1766619340&x-signature=GLjdGsE1yCk1LF5EfV%2BX4souq94%3D&x-signature-webp=CYnEQLJfgwpcgTNt%2FGw%2BofoXdHY%3D"},
     { id: 4, nama: "Telur Ayam 1kg", kategori: "Sembako", stok: 30, hargaEcer: 28000, gambar: "https://images.unsplash.com/photo-1582722872445-44c501f3c89d?w=400" },
     { id: 5, nama: "Terigu Segitiga Biru", kategori: "Sembako", stok: 25, hargaEcer: 12000, gambar: "https://c.alfagift.id/product/1/1_A28090001915_20240508102544159_base.jpg" },
     { id: 6, nama: "Garam Dapur Beriodium", kategori: "Bumbu", stok: 100, hargaEcer: 3500, gambar: "https://images.unsplash.com/photo-1610450534241-1f9532658428?w=400" },

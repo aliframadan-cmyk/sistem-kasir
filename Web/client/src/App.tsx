@@ -51,7 +51,7 @@ const App = () => {
     { id: 7, nama: "Kecap Manis 520ml", kategori: "Bumbu", stok: 20, hargaEcer: 22000, gambar: "https://image.dailymartazzahra.com/s3/productimages/webp/co37129/p1338307/w600-h600/78c47105-a32b-4d73-86cf-9d796c3dfe23.png" },
     { id: 8, nama: "Sabun Cuci Piring", kategori: "Kebersihan", stok: 40, hargaEcer: 15000, gambar: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRotGR-X1ZJjR0kexZEx50GhUMXN4LtARz-TQ&s" },
     { id: 9, nama: "Sampoerna Mild 16", kategori: "Rokok", stok: 50, hargaEcer: 35000, gambar: "https://image.dailymartazzahra.com/s3/productimages/webp/co37129/p864911/w600-h600/a9b35851-36e9-45cc-a777-404604dba39e.png" },
-    { id: 10, nama: "Gudang Garam Filter 12", kategori: "Rokok", stok: 40, hargaEcer: 24000, gambar: "https://images.unsplash.com/photo-1623945410152-30128956973e?w=400" },
+    { id: 10, nama: "Gudang Garam Filter 12", kategori: "Rokok", stok: 40, hargaEcer: 24000, gambar: "https://www.static-src.com/wcsstore/Indraprastha/images/catalog/full//91/MTA-16813531/gudang_garam_gudang_garam_filter_internasional_-12_batang-_bungkus-_full01_kvks0pt6.jpg" },
     { id: 11, nama: "Djarum 76 Apel", kategori: "Rokok", stok: 30, hargaEcer: 17000, gambar: "https://www.static-src.com/wcsstore/Indraprastha/images/catalog/full/catalog-image/89/MTA-183102054/djarum_76_djarum_76_apel_rokok_kretek_12_-_skt_full03_ie65ropx.webp" },
   ]);
 

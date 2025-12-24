@@ -49,8 +49,8 @@ const App = () => {
     { id: 5, nama: "Terigu Segitiga Biru", kategori: "Sembako", stok: 25, hargaEcer: 12000, gambar: "https://c.alfagift.id/product/1/1_A28090001915_20240508102544159_base.jpg" },
     { id: 6, nama: "Garam Dapur Beriodium", kategori: "Bumbu", stok: 100, hargaEcer: 3500, gambar: "https://www.static-src.com/wcsstore/Indraprastha/images/catalog/full//89/MTA-28327120/no-brand_no-brand_full01.jpg" },
     { id: 7, nama: "Kecap Manis 520ml", kategori: "Bumbu", stok: 20, hargaEcer: 22000, gambar: "https://image.dailymartazzahra.com/s3/productimages/webp/co37129/p1338307/w600-h600/78c47105-a32b-4d73-86cf-9d796c3dfe23.png" },
-    { id: 8, nama: "Sabun Cuci Piring", kategori: "Kebersihan", stok: 40, hargaEcer: 15000, gambar: "https://images.unsplash.com/photo-1584622781564-1d9876a13d1e?q=80&w=400&auto=format&fit=crop" },
-    { id: 9, nama: "Sampoerna Mild 16", kategori: "Rokok", stok: 50, hargaEcer: 35000, gambar: "https://images.unsplash.com/photo-1516062423079-7ca13cdc7f5a?w=400" },
+    { id: 8, nama: "Sabun Cuci Piring", kategori: "Kebersihan", stok: 40, hargaEcer: 15000, gambar: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRotGR-X1ZJjR0kexZEx50GhUMXN4LtARz-TQ&s" },
+    { id: 9, nama: "Sampoerna Mild 16", kategori: "Rokok", stok: 50, hargaEcer: 35000, gambar: "https://image.dailymartazzahra.com/s3/productimages/webp/co37129/p864911/w600-h600/a9b35851-36e9-45cc-a777-404604dba39e.png" },
     { id: 10, nama: "Gudang Garam Filter 12", kategori: "Rokok", stok: 40, hargaEcer: 24000, gambar: "https://images.unsplash.com/photo-1623945410152-30128956973e?w=400" },
     { id: 11, nama: "Djarum 76 Apel", kategori: "Rokok", stok: 30, hargaEcer: 17000, gambar: "https://www.static-src.com/wcsstore/Indraprastha/images/catalog/full/catalog-image/89/MTA-183102054/djarum_76_djarum_76_apel_rokok_kretek_12_-_skt_full03_ie65ropx.webp" },
   ]);

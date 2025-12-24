@@ -52,7 +52,7 @@ const App = () => {
     { id: 8, nama: "Sabun Cuci Piring", kategori: "Kebersihan", stok: 40, hargaEcer: 15000, gambar: "https://images.unsplash.com/photo-1584622781564-1d9876a13d1e?q=80&w=400&auto=format&fit=crop" },
     { id: 9, nama: "Sampoerna Mild 16", kategori: "Rokok", stok: 50, hargaEcer: 35000, gambar: "https://images.unsplash.com/photo-1516062423079-7ca13cdc7f5a?w=400" },
     { id: 10, nama: "Gudang Garam Filter 12", kategori: "Rokok", stok: 40, hargaEcer: 24000, gambar: "https://images.unsplash.com/photo-1623945410152-30128956973e?w=400" },
-    { id: 11, nama: "Djarum Super 12", kategori: "Rokok", stok: 30, hargaEcer: 23000, gambar: "https://images.unsplash.com/photo-1568200234200-a53b51b32f91?w=400" },
+    { id: 11, nama: "Djarum 76 Apel", kategori: "Rokok", stok: 30, hargaEcer: 17000, gambar: "https://www.static-src.com/wcsstore/Indraprastha/images/catalog/full/catalog-image/89/MTA-183102054/djarum_76_djarum_76_apel_rokok_kretek_12_-_skt_full03_ie65ropx.webp" },
   ]);
 
   // --- Logika POS ---

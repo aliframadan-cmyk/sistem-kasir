@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
-  LayoutGrid, ShoppingCart, Package, History, Search, Plus, 
+  LayoutGrid, ShoppingCart, Package, History, Search, 
   Trash2, X, CheckCircle2, ReceiptText, AlertCircle
 } from 'lucide-react';
 
@@ -9,8 +9,8 @@ interface Produk {
   id: number;
   nama: string;
   kategori: string;
-  stok: number;
-  hargaEcer: number;
+  stok: number;     // Di DB namanya stockPcs, nanti kita mapping
+  hargaEcer: number; // Di DB namanya pricePcs, nanti kita mapping
 }
 
 interface ItemKeranjang extends Produk {
@@ -30,28 +30,59 @@ const App = () => {
   const [activeTab, setActiveTab] = useState<'pos' | 'inventory' | 'history'>('pos');
   const [search, setSearch] = useState("");
   const [keranjang, setKeranjang] = useState<ItemKeranjang[]>([]);
-  const [riwayat, setRiwayat] = useState<HistoryTransaksi[]>([]);
+  const [riwayat, setRiwayat] = useState<HistoryTransaksi[]>([]); // Masih lokal (bisa diupdate nanti)
   const [selectedHistory, setSelectedHistory] = useState<HistoryTransaksi | null>(null);
+  
+  // Popups
   const [showEmptyWarning, setShowEmptyWarning] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  
+  // Loading State
+  const [isLoading, setIsLoading] = useState(false);
 
-  // --- Data Produk Sembako ---
-  const [produkList, setProdukList] = useState<Produk[]>([
-    { id: 1, nama: "Beras Premium 5kg", kategori: "Sembako", stok: 20, hargaEcer: 75000 },
-    { id: 2, nama: "Minyak Goreng 2L", kategori: "Sembako", stok: 15, hargaEcer: 34000 },
-    { id: 3, nama: "Gula Pasir 1kg", kategori: "Sembako", stok: 50, hargaEcer: 16500 },
-    { id: 4, nama: "Telur Ayam 1kg", kategori: "Sembako", stok: 30, hargaEcer: 28000 },
-    { id: 5, nama: "Terigu Segitiga Biru", kategori: "Sembako", stok: 25, hargaEcer: 12000 },
-    { id: 6, nama: "Garam Dapur Beriodium", kategori: "Bumbu", stok: 100, hargaEcer: 3500 },
-    { id: 7, nama: "Kecap Manis 520ml", kategori: "Bumbu", stok: 20, hargaEcer: 22000 },
-    { id: 8, nama: "Sabun Cuci Piring", kategori: "Kebersihan", stok: 40, hargaEcer: 15000 },
-  ]);
+  // --- Data Produk (Sekarang Kosong Dulu) ---
+  const [produkList, setProdukList] = useState<Produk[]>([]);
+
+  // --- FUNGSI 1: AMBIL DATA DARI SERVER (BACKEND) ---
+  const fetchProducts = async () => {
+    try {
+      // Panggil API Backend
+      const response = await fetch('http://localhost:3000/api/products');
+      const data = await response.json();
+
+      // Mapping Data: Sesuaikan nama field dari Database ke Frontend
+      // DB: stockPcs, pricePcs -> Frontend: stok, hargaEcer
+      const formattedData = data.map((item: any) => ({
+        id: item.id,
+        nama: item.name,
+        kategori: item.category,
+        stok: item.stockPcs,   // Mengambil stockPcs dari Prisma
+        hargaEcer: item.pricePcs // Mengambil pricePcs dari Prisma
+      }));
+
+      setProdukList(formattedData);
+    } catch (error) {
+      console.error("Gagal koneksi ke server:", error);
+      alert("Gagal mengambil data produk. Pastikan Server (Backend) sudah jalan!");
+    }
+  };
+
+  // Jalankan fetchProducts saat pertama kali web dibuka
+  useEffect(() => {
+    fetchProducts();
+  }, []);
 
   // --- Logika POS ---
   const tambahKeKeranjang = (produk: Produk) => {
-    if (produk.stok <= 0) return alert("Stok habis!");
-    const itemExist = keranjang.find(item => item.id === produk.id);
-    if (itemExist) {
+    if (produk.stok <= 0) return alert("Stok habis di Database!");
+    
+    // Cek apakah stok di keranjang sudah melebihi stok tersedia
+    const itemInCart = keranjang.find(item => item.id === produk.id);
+    if (itemInCart && itemInCart.qty >= produk.stok) {
+        return alert("Stok tidak cukup!");
+    }
+
+    if (itemInCart) {
       setKeranjang(keranjang.map(item => 
         item.id === produk.id ? { ...item, qty: item.qty + 1, subtotal: (item.qty + 1) * item.hargaEcer } : item
       ));
@@ -62,38 +93,72 @@ const App = () => {
 
   const totalHarga = keranjang.reduce((acc, item) => acc + item.subtotal, 0);
 
-  const handleBayar = () => {
+  // --- FUNGSI 2: PROSES BAYAR KE SERVER ---
+  const handleBayar = async () => {
     if (keranjang.length === 0) {
       setShowEmptyWarning(true);
       return;
     }
-    const transaksiBaru = {
-      id: `TRX-${Math.floor(1000 + Math.random() * 9000)}`,
-      tanggal: new Date().toLocaleString('id-ID'),
-      items: [...keranjang],
-      total: totalHarga
-    };
-    setProdukList(produkList.map(p => {
-      const itemInCart = keranjang.find(i => i.id === p.id);
-      return itemInCart ? { ...p, stok: p.stok - itemInCart.qty } : p;
-    }));
-    setRiwayat([transaksiBaru, ...riwayat]);
-    setKeranjang([]);
-    setShowSuccess(true);
+
+    setIsLoading(true);
+
+    try {
+      // Siapkan data untuk dikirim ke API
+      const payload = {
+        items: keranjang.map(item => ({
+          id: item.id,
+          qty: item.qty
+        }))
+      };
+
+      // Kirim ke Backend
+      const response = await fetch('http://localhost:3000/api/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Jika Sukses:
+        // 1. Catat di Riwayat Lokal (Optional, untuk tampilan saja)
+        const transaksiBaru = {
+            id: `TRX-${Math.floor(Date.now() / 1000)}`, // ID Unix Timestamp
+            tanggal: new Date().toLocaleString('id-ID'),
+            items: [...keranjang],
+            total: totalHarga
+        };
+        setRiwayat([transaksiBaru, ...riwayat]);
+
+        // 2. Refresh Data Produk (Supaya stok di layar berkurang)
+        await fetchProducts();
+
+        // 3. Reset Keranjang & Tampilkan Sukses
+        setKeranjang([]);
+        setShowSuccess(true);
+      } else {
+        alert("Gagal: " + result.message);
+      }
+
+    } catch (error) {
+      console.error(error);
+      alert("Terjadi kesalahan koneksi saat transaksi.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // --- Fitur Hapus Riwayat ---
   const hapusSatuRiwayat = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation(); // Agar modal detail tidak ikut terbuka
+    e.stopPropagation();
     if (confirm("Hapus catatan transaksi ini?")) {
       setRiwayat(riwayat.filter(item => item.id !== id));
     }
   };
 
   const hapusSemuaRiwayat = () => {
-    if (confirm("Anda yakin ingin menghapus SEMUA riwayat transaksi? Tindakan ini tidak bisa dibatalkan.")) {
-      setRiwayat([]);
-    }
+    if (confirm("Hapus SEMUA riwayat?")) setRiwayat([]);
   };
 
   return (
@@ -102,9 +167,9 @@ const App = () => {
       <aside className="w-20 bg-[#0F172A] flex flex-col items-center py-6 gap-4">
         <div className="w-12 h-12 bg-blue-600 rounded-xl flex items-center justify-center text-white mb-6 shadow-lg shadow-blue-900/20"><Package size={28} /></div>
         <nav className="flex flex-col gap-4">
-          <button onClick={() => setActiveTab('pos')} className={`p-3 rounded-xl transition-all ${activeTab === 'pos' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-400 hover:text-white'}`}><ShoppingCart size={24}/></button>
-          <button onClick={() => setActiveTab('inventory')} className={`p-3 rounded-xl transition-all ${activeTab === 'inventory' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-400 hover:text-white'}`}><LayoutGrid size={24}/></button>
-          <button onClick={() => setActiveTab('history')} className={`p-3 rounded-xl transition-all ${activeTab === 'history' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-400 hover:text-white'}`}><History size={24}/></button>
+          <button onClick={() => setActiveTab('pos')} className={`p-3 rounded-xl transition-all ${activeTab === 'pos' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}><ShoppingCart size={24}/></button>
+          <button onClick={() => setActiveTab('inventory')} className={`p-3 rounded-xl transition-all ${activeTab === 'inventory' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}><LayoutGrid size={24}/></button>
+          <button onClick={() => setActiveTab('history')} className={`p-3 rounded-xl transition-all ${activeTab === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}><History size={24}/></button>
         </nav>
       </aside>
 
@@ -156,7 +221,7 @@ const App = () => {
             </div>
           )}
 
-          {/* HISTORY VIEW DENGAN FITUR HAPUS */}
+          {/* HISTORY VIEW */}
           {activeTab === 'history' && (
             <div className="space-y-4 max-w-4xl">
               {riwayat.length > 0 && (
@@ -211,32 +276,36 @@ const App = () => {
             </div>
             <div className="pt-6 border-t border-dashed border-slate-200 mt-6 space-y-4">
               <div className="flex justify-between items-end"><span className="font-bold text-slate-400 text-sm">TOTAL</span><span className="text-3xl font-black text-blue-600 tracking-tighter">Rp {totalHarga.toLocaleString('id-ID')}</span></div>
-              <button onClick={handleBayar} className="w-full bg-blue-600 text-white py-5 rounded-2xl font-black shadow-xl shadow-blue-500/20 active:scale-95 transition-all">BAYAR SEKARANG</button>
+              <button 
+                onClick={handleBayar} 
+                disabled={isLoading}
+                className={`w-full text-white py-5 rounded-2xl font-black shadow-xl transition-all ${isLoading ? 'bg-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 active:scale-95 shadow-blue-500/20'}`}
+              >
+                {isLoading ? 'MEMPROSES...' : 'BAYAR SEKARANG'}
+              </button>
             </div>
           </aside>
         )}
       </div>
 
-      {/* --- POPUP KERANJANG KOSONG --- */}
+      {/* --- POPUPS --- */}
       {showEmptyWarning && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[100] p-4">
           <div className="bg-white w-full max-w-sm rounded-[3rem] p-10 shadow-2xl text-center">
-            <div className="w-20 h-20 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-amber-100"><ShoppingCart size={40} /></div>
-            <h2 className="text-2xl font-black text-slate-800 mb-2">Oops! Keranjang Kosong</h2>
-            <p className="text-slate-500 text-sm mb-8 font-medium">Pilih sembako terlebih dahulu sebelum lanjut ke pembayaran.</p>
-            <button onClick={() => setShowEmptyWarning(false)} className="w-full bg-[#14B8A6] text-white py-4 rounded-2xl font-black uppercase shadow-lg shadow-teal-500/20">OKE, SAYA MENGERTI</button>
+             <div className="w-20 h-20 bg-amber-50 text-amber-500 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-amber-100"><ShoppingCart size={40} /></div>
+             <h2 className="text-2xl font-black text-slate-800 mb-2">Keranjang Kosong</h2>
+             <button onClick={() => setShowEmptyWarning(false)} className="w-full bg-teal-500 text-white py-4 rounded-2xl font-bold mt-8">OKE</button>
           </div>
         </div>
       )}
 
-      {/* --- POPUP SUKSES --- */}
       {showSuccess && (
         <div className="fixed inset-0 bg-blue-900/40 backdrop-blur-md flex items-center justify-center z-[100] p-4">
           <div className="bg-white w-full max-w-sm rounded-[3rem] p-10 shadow-2xl text-center">
             <div className="w-20 h-20 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-green-100"><CheckCircle2 size={40} /></div>
-            <h2 className="text-2xl font-black text-slate-800 mb-2">Berhasil!</h2>
-            <p className="text-slate-500 text-sm mb-8 font-medium">Stok sudah diperbarui dan transaksi tercatat.</p>
-            <button onClick={() => setShowSuccess(false)} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black uppercase shadow-lg shadow-blue-500/20">MANTAP!</button>
+            <h2 className="text-2xl font-black text-slate-800 mb-2">Transaksi Berhasil!</h2>
+            <p className="text-slate-500 text-sm mb-8 font-medium">Stok database telah diperbarui.</p>
+            <button onClick={() => setShowSuccess(false)} className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold">MANTAP!</button>
           </div>
         </div>
       )}

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   LayoutGrid, ShoppingCart, Package, History, Search, LayoutDashboard,
-  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, Percent, UserCircle, Lock, KeyRound, Settings
+  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, Percent, UserCircle, Lock, KeyRound, Settings, ShieldCheck
 } from 'lucide-react';
 
 // --- DATA AWAL PRODUK ---
@@ -14,7 +14,7 @@ const DATA_PRODUK_AWAL = [
   { id: 6, nama: "Kopi Sachet", kategori: "Minuman", stok: 45, hargaEcer: 1500, barcode: "8991006" },
 ];
 
-// --- DATA USER DEFAULT (Jika belum ada di LocalStorage) ---
+// --- DATA USER DEFAULT ---
 const DEFAULT_USERS = [
   { username: 'admin', password: '123', role: 'admin', nama: 'Boss Admin' },
   { username: 'kasir', password: '123', role: 'kasir', nama: 'Kasir Jaga' },
@@ -29,7 +29,6 @@ interface UserData { username: string; password: string; role: string; nama: str
 
 const App = () => {
   // --- STATE USER & LOGIN ---
-  // Load Users dari LocalStorage (agar password tersimpan)
   const [dbUsers, setDbUsers] = useState<UserData[]>(() => {
     const saved = localStorage.getItem('db_users');
     return saved ? JSON.parse(saved) : DEFAULT_USERS;
@@ -45,7 +44,9 @@ const App = () => {
 
   // --- STATE GANTI PASSWORD ---
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showPassSuccess, setShowPassSuccess] = useState(false); // New State untuk animasi sukses ganti password
   const [passForm, setPassForm] = useState({ oldPass: '', newPass: '', confirmPass: '' });
+  const [passError, setPassError] = useState('');
 
   // --- STATE APLIKASI ---
   const [activeTab, setActiveTab] = useState<'dashboard' | 'pos' | 'inventory' | 'history'>('dashboard');
@@ -86,7 +87,7 @@ const App = () => {
   // --- EFFECT ---
   useEffect(() => { localStorage.setItem('db_produk', JSON.stringify(produkList)); }, [produkList]);
   useEffect(() => { localStorage.setItem('db_riwayat', JSON.stringify(riwayat)); }, [riwayat]);
-  useEffect(() => { localStorage.setItem('db_users', JSON.stringify(dbUsers)); }, [dbUsers]); // Simpan User ke DB Lokal
+  useEffect(() => { localStorage.setItem('db_users', JSON.stringify(dbUsers)); }, [dbUsers]);
 
   useEffect(() => { 
     if (activeTab === 'pos' && barcodeInputRef.current) barcodeInputRef.current.focus(); 
@@ -104,7 +105,6 @@ const App = () => {
   // --- LOGIKA LOGIN ---
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    // Cek login pakai dbUsers (State) bukan CONST
     const user = dbUsers.find(u => u.username === loginForm.username && u.password === loginForm.password);
     if (user) {
       setCurrentUser({ username: user.username, role: user.role as 'admin'|'kasir', nama: user.nama });
@@ -119,22 +119,23 @@ const App = () => {
     setCurrentUser(null);
     setKeranjang([]); 
     setDiskon(0);
+    setShowPassSuccess(false); // Reset modal sukses jika logout dipanggil
   };
 
   // --- LOGIKA GANTI PASSWORD ---
   const handleChangePassword = () => {
     if (!currentUser) return;
     const { oldPass, newPass, confirmPass } = passForm;
+    setPassError('');
 
-    if (!oldPass || !newPass || !confirmPass) return alert("Semua kolom harus diisi!");
-    if (newPass !== confirmPass) return alert("Password Baru dan Konfirmasi tidak cocok!");
+    if (!oldPass || !newPass || !confirmPass) return setPassError("Semua kolom harus diisi!");
+    if (newPass !== confirmPass) return setPassError("Password Baru dan Konfirmasi tidak cocok!");
     
-    // Cari data asli user di database
     const userIndex = dbUsers.findIndex(u => u.username === currentUser.username);
     if (userIndex === -1) return;
 
     if (dbUsers[userIndex].password !== oldPass) {
-        return alert("Password Lama Salah!");
+        return setPassError("Password Lama Salah!");
     }
 
     // Update Password
@@ -142,10 +143,10 @@ const App = () => {
     updatedUsers[userIndex].password = newPass;
     setDbUsers(updatedUsers);
     
-    alert("Password Berhasil Diganti! Silakan login ulang.");
+    // UI Feedback
     setShowPasswordModal(false);
     setPassForm({ oldPass: '', newPass: '', confirmPass: '' });
-    handleLogout(); // Logout otomatis agar aman
+    setShowPassSuccess(true); // Tampilkan animasi sukses
   };
 
   // --- LOGIKA POS ---
@@ -291,9 +292,7 @@ const App = () => {
             {currentUser.role === 'admin' && (<button onClick={() => setActiveTab('inventory')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all duration-300 ${activeTab === 'inventory' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}><LayoutGrid size={24}/> <span className="text-[10px] font-bold">Stok</span></button>)}
             <button onClick={() => setActiveTab('history')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all duration-300 ${activeTab === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}><History size={24}/> <span className="text-[10px] font-bold">Riwayat</span></button>
         </nav>
-        {/* Tombol Ganti Password */}
         <button onClick={() => setShowPasswordModal(true)} className="p-3 text-slate-400 hover:bg-slate-800 hover:text-white rounded-xl" title="Ganti Password"><KeyRound size={24}/></button>
-        {/* Tombol Logout */}
         <button onClick={handleLogout} className="p-3 text-red-400 hover:bg-red-500/10 rounded-xl mb-4" title="Keluar"><LogOut size={24}/></button>
       </aside>
 
@@ -404,32 +403,38 @@ const App = () => {
       {showDeleteConfirm && <div className="fixed inset-0 bg-red-900/40 backdrop-blur-md flex items-center justify-center z-[120] p-4"><div className="bg-white p-8 rounded-[2rem] text-center shadow-2xl w-full max-w-sm animate-pop-in border-4 border-white"><div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse"><Trash2 size={40} className="text-red-500"/></div><h2 className="text-2xl font-black text-slate-800 mb-2">Hapus Produk Ini?</h2><p className="text-slate-500 text-sm mb-8 leading-relaxed">Tindakan ini tidak bisa dibatalkan.<br/>Data produk akan hilang permanen.</p><div className="grid grid-cols-2 gap-3"><button onClick={() => setShowDeleteConfirm(false)} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 rounded-xl font-bold transition-all">Batal</button><button onClick={executeDelete} className="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-red-200 transition-all flex items-center justify-center gap-2">Ya, Hapus</button></div></div></div>}
       {showEmptyWarning && <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[100]"><div className="bg-white p-10 rounded-[3rem] text-center shadow-2xl animate-pop-in"><div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6"><ShoppingCart size={40} className="text-amber-500"/></div><h2 className="text-2xl font-black text-slate-800">Keranjang Kosong</h2><p className="text-slate-400 mt-2">Pilih barang dulu sebelum bayar.</p><button onClick={()=>setShowEmptyWarning(false)} className="mt-6 w-full bg-slate-100 hover:bg-slate-200 py-3 rounded-xl font-bold transition-all">OK, Siap</button></div></div>}
       
-      {/* MODAL GANTI PASSWORD (NEW) */}
+      {/* MODAL INPUT GANTI PASSWORD */}
       {showPasswordModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[150] p-4">
             <div className="bg-white w-full max-w-md rounded-[2rem] p-8 shadow-2xl animate-pop-in border-4 border-white relative">
                 <h2 className="text-2xl font-black text-slate-800 mb-1 flex items-center gap-2"><Settings className="text-slate-400"/> Ganti Password</h2>
                 <p className="text-sm text-slate-400 mb-6">Ubah password untuk akun: <b>{currentUser?.username}</b></p>
-                
                 <div className="space-y-4">
-                    <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase ml-1">Password Lama</label>
-                        <input type="password" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500 transition-all" value={passForm.oldPass} onChange={e => setPassForm({...passForm, oldPass: e.target.value})} placeholder="******"/>
-                    </div>
-                    <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase ml-1">Password Baru</label>
-                        <input type="password" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500 transition-all" value={passForm.newPass} onChange={e => setPassForm({...passForm, newPass: e.target.value})} placeholder="******"/>
-                    </div>
-                    <div>
-                        <label className="text-xs font-bold text-slate-500 uppercase ml-1">Konfirmasi Password Baru</label>
-                        <input type="password" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500 transition-all" value={passForm.confirmPass} onChange={e => setPassForm({...passForm, confirmPass: e.target.value})} placeholder="******"/>
-                    </div>
+                    <div><label className="text-xs font-bold text-slate-500 uppercase ml-1">Password Lama</label><input type="password" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500 transition-all" value={passForm.oldPass} onChange={e => setPassForm({...passForm, oldPass: e.target.value})} placeholder="******"/></div>
+                    <div><label className="text-xs font-bold text-slate-500 uppercase ml-1">Password Baru</label><input type="password" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500 transition-all" value={passForm.newPass} onChange={e => setPassForm({...passForm, newPass: e.target.value})} placeholder="******"/></div>
+                    <div><label className="text-xs font-bold text-slate-500 uppercase ml-1">Konfirmasi Password Baru</label><input type="password" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500 transition-all" value={passForm.confirmPass} onChange={e => setPassForm({...passForm, confirmPass: e.target.value})} placeholder="******"/></div>
                 </div>
-
+                {passError && <p className="text-red-500 text-xs font-bold text-center bg-red-50 py-2 mt-4 rounded-lg">{passError}</p>}
                 <div className="grid grid-cols-2 gap-3 mt-8">
-                    <button onClick={() => setShowPasswordModal(false)} className="py-3 font-bold text-slate-400 hover:bg-slate-50 rounded-xl">Batal</button>
+                    <button onClick={() => { setShowPasswordModal(false); setPassError(''); }} className="py-3 font-bold text-slate-400 hover:bg-slate-50 rounded-xl">Batal</button>
                     <button onClick={handleChangePassword} className="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-black shadow-lg transition-all">Simpan</button>
                 </div>
+            </div>
+        </div>
+      )}
+
+      {/* NEW: MODAL SUKSES GANTI PASSWORD */}
+      {showPassSuccess && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[160] p-4">
+            <div className="bg-white p-10 rounded-[3rem] text-center shadow-2xl w-full max-w-sm animate-pop-in border-4 border-white">
+                <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-green-200">
+                    <ShieldCheck size={48} className="text-green-600"/>
+                </div>
+                <h2 className="text-2xl font-black text-slate-800 mb-2">Password Diubah!</h2>
+                <p className="text-slate-400 text-sm mb-8 leading-relaxed">Password Anda berhasil diperbarui.<br/>Silakan login kembali untuk keamanan.</p>
+                <button onClick={handleLogout} className="w-full bg-slate-800 hover:bg-slate-900 text-white py-4 rounded-xl font-bold flex items-center gap-2 justify-center transition-all shadow-xl">
+                    LOGIN ULANG <ArrowRight size={18}/>
+                </button>
             </div>
         </div>
       )}

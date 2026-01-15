@@ -13,6 +13,7 @@ app.use(express.json());
 app.get('/', (req, res) => {
   res.send('Halo! Server Kasir Sembako sudah berjalan siap digunakan.');
 });
+
 // 1. GET SEMUA PRODUK
 app.get('/api/products', async (req, res) => {
   try {
@@ -84,6 +85,28 @@ app.post('/api/checkout', async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(400).json({ success: false, error: error.message });
+  }
+});
+
+// 3. API Tambah Produk Baru
+app.post('/api/products', async (req, res) => {
+  const { name, category, stockPcs, pricePcs, priceDus, barcode } = req.body;
+
+  try {
+    const newProduct = await prisma.product.create({
+      data: {
+        name,
+        category,
+        stockPcs: parseInt(stockPcs), // Pastikan jadi angka
+        pricePcs: parseInt(pricePcs),
+        priceDus: parseInt(priceDus) || 0, // Opsional
+        barcode: barcode || null,          // Opsional
+      }
+    });
+    res.json({ success: true, data: newProduct });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: "Gagal menyimpan barang." });
   }
 });
 

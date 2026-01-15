@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   LayoutGrid, ShoppingCart, Package, History, Search, LayoutDashboard,
-  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, Percent, UserCircle, Lock, KeyRound, Settings, ShieldCheck
+  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, Percent, UserCircle, KeyRound, Settings, ShieldCheck, Users, UserPlus, XCircle
 } from 'lucide-react';
 
 // --- DATA AWAL PRODUK ---
@@ -11,21 +11,20 @@ const DATA_PRODUK_AWAL = [
   { id: 3, nama: "Gula Pasir 1kg", kategori: "Sembako", stok: 50, hargaEcer: 14500, barcode: "8991003" },
   { id: 4, nama: "Telur Ayam 1kg", kategori: "Sembako", stok: 8, hargaEcer: 28000, barcode: "8991004" },
   { id: 5, nama: "Indomie Goreng", kategori: "Makanan", stok: 100, hargaEcer: 3500, barcode: "8991005" },
-  { id: 6, nama: "Kopi Sachet", kategori: "Minuman", stok: 45, hargaEcer: 1500, barcode: "8991006" },
 ];
 
 // --- DATA USER DEFAULT ---
 const DEFAULT_USERS = [
-  { username: 'admin', password: '123', role: 'admin', nama: 'Boss Admin' },
-  { username: 'kasir', password: '123', role: 'kasir', nama: 'Kasir Jaga' },
+  { id: 1, username: 'admin', password: '123', role: 'admin', nama: 'Boss Admin' },
+  { id: 2, username: 'kasir', password: '123', role: 'kasir', nama: 'Kasir Utama' },
 ];
 
 // --- Interfaces ---
 interface Produk { id: number; nama: string; kategori: string; stok: number; hargaEcer: number; barcode: string; }
 interface ItemKeranjang extends Produk { qty: number; subtotal: number; }
 interface HistoryTransaksi { id: string; kasir: string; tanggal: string; waktu: string; items: ItemKeranjang[]; subtotalAwal: number; diskon: number; total: number; }
-interface UserSession { username: string; role: 'admin' | 'kasir'; nama: string; }
-interface UserData { username: string; password: string; role: string; nama: string; }
+interface UserSession { id: number; username: string; role: 'admin' | 'kasir'; nama: string; }
+interface UserData { id: number; username: string; password: string; role: string; nama: string; }
 
 const App = () => {
   // --- STATE USER & LOGIN ---
@@ -42,14 +41,18 @@ const App = () => {
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
 
+  // --- STATE MANAJEMEN USER (NEW) ---
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [newUser, setNewUser] = useState({ username: '', password: '', nama: '', role: 'kasir' });
+
   // --- STATE GANTI PASSWORD ---
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [showPassSuccess, setShowPassSuccess] = useState(false); // New State untuk animasi sukses ganti password
+  const [showPassSuccess, setShowPassSuccess] = useState(false);
   const [passForm, setPassForm] = useState({ oldPass: '', newPass: '', confirmPass: '' });
   const [passError, setPassError] = useState('');
 
   // --- STATE APLIKASI ---
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'pos' | 'inventory' | 'history'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'pos' | 'inventory' | 'history' | 'users'>('dashboard');
   
   const [produkList, setProdukList] = useState<Produk[]>(() => {
     const saved = localStorage.getItem('db_produk');
@@ -107,7 +110,7 @@ const App = () => {
     e.preventDefault();
     const user = dbUsers.find(u => u.username === loginForm.username && u.password === loginForm.password);
     if (user) {
-      setCurrentUser({ username: user.username, role: user.role as 'admin'|'kasir', nama: user.nama });
+      setCurrentUser({ id: user.id, username: user.username, role: user.role as 'admin'|'kasir', nama: user.nama });
       setLoginError('');
       setLoginForm({ username: '', password: '' });
     } else {
@@ -119,7 +122,28 @@ const App = () => {
     setCurrentUser(null);
     setKeranjang([]); 
     setDiskon(0);
-    setShowPassSuccess(false); // Reset modal sukses jika logout dipanggil
+    setShowPassSuccess(false);
+  };
+
+  // --- LOGIKA MANAJEMEN USER (NEW) ---
+  const handleAddUser = () => {
+    if (!newUser.username || !newUser.password || !newUser.nama) return alert("Semua kolom wajib diisi!");
+    if (dbUsers.some(u => u.username === newUser.username)) return alert("Username sudah dipakai!");
+
+    const newId = dbUsers.length > 0 ? Math.max(...dbUsers.map(u => u.id)) + 1 : 1;
+    const userToAdd = { id: newId, ...newUser };
+    
+    setDbUsers([...dbUsers, userToAdd]);
+    setShowAddUserModal(false);
+    setNewUser({ username: '', password: '', nama: '', role: 'kasir' });
+    alert("User Berhasil Ditambahkan!");
+  };
+
+  const handleDeleteUser = (id: number) => {
+    if (currentUser?.id === id) return alert("Tidak bisa menghapus akun sendiri!");
+    if (confirm("Yakin ingin menghapus user ini?")) {
+        setDbUsers(dbUsers.filter(u => u.id !== id));
+    }
   };
 
   // --- LOGIKA GANTI PASSWORD ---
@@ -138,15 +162,13 @@ const App = () => {
         return setPassError("Password Lama Salah!");
     }
 
-    // Update Password
     const updatedUsers = [...dbUsers];
     updatedUsers[userIndex].password = newPass;
     setDbUsers(updatedUsers);
     
-    // UI Feedback
     setShowPasswordModal(false);
     setPassForm({ oldPass: '', newPass: '', confirmPass: '' });
-    setShowPassSuccess(true); // Tampilkan animasi sukses
+    setShowPassSuccess(true);
   };
 
   // --- LOGIKA POS ---
@@ -291,6 +313,13 @@ const App = () => {
             <button onClick={() => setActiveTab('pos')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all duration-300 ${activeTab === 'pos' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}><ShoppingCart size={24}/> <span className="text-[10px] font-bold">Kasir</span></button>
             {currentUser.role === 'admin' && (<button onClick={() => setActiveTab('inventory')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all duration-300 ${activeTab === 'inventory' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}><LayoutGrid size={24}/> <span className="text-[10px] font-bold">Stok</span></button>)}
             <button onClick={() => setActiveTab('history')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all duration-300 ${activeTab === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}><History size={24}/> <span className="text-[10px] font-bold">Riwayat</span></button>
+            
+            {/* NEW MENU: USERS */}
+            {currentUser.role === 'admin' && (
+                <button onClick={() => setActiveTab('users')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all duration-300 ${activeTab === 'users' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                    <Users size={24}/> <span className="text-[10px] font-bold">Tim</span>
+                </button>
+            )}
         </nav>
         <button onClick={() => setShowPasswordModal(true)} className="p-3 text-slate-400 hover:bg-slate-800 hover:text-white rounded-xl" title="Ganti Password"><KeyRound size={24}/></button>
         <button onClick={handleLogout} className="p-3 text-red-400 hover:bg-red-500/10 rounded-xl mb-4" title="Keluar"><LogOut size={24}/></button>
@@ -302,7 +331,9 @@ const App = () => {
           {/* HEADER */}
           <div className="flex justify-between items-center mb-8">
             <div>
-                <h1 className="text-3xl font-black text-slate-800 tracking-tight capitalize">{activeTab === 'dashboard' ? 'Dashboard' : activeTab === 'pos' ? 'Kasir' : activeTab === 'inventory' ? 'Stok Barang' : 'Riwayat'}</h1>
+                <h1 className="text-3xl font-black text-slate-800 tracking-tight capitalize">
+                    {activeTab === 'dashboard' ? 'Dashboard' : activeTab === 'pos' ? 'Kasir' : activeTab === 'inventory' ? 'Stok Barang' : activeTab === 'history' ? 'Riwayat' : 'Manajemen Tim'}
+                </h1>
                 <div className="flex items-center gap-2 mt-1">
                     <span className={`text-[10px] px-2 py-0.5 rounded uppercase font-bold ${currentUser.role === 'admin' ? 'bg-purple-100 text-purple-600' : 'bg-green-100 text-green-600'}`}>{currentUser.role}</span>
                     <p className="text-slate-400 text-sm font-medium">Halo, {currentUser.nama}</p>
@@ -312,7 +343,7 @@ const App = () => {
               {activeTab === 'pos' && (
                 <form onSubmit={handleScanBarcode} className="relative group"><div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><ScanBarcode className="text-blue-500" size={20}/></div><input ref={barcodeInputRef} type="text" className="pl-10 pr-4 py-3 bg-white border-2 border-blue-100 focus:border-blue-500 rounded-xl outline-none font-bold w-64 shadow-sm" placeholder="Scan Barcode..." value={barcodeInput} onChange={(e) => setBarcodeInput(e.target.value)} autoFocus/></form>
               )}
-              {activeTab !== 'dashboard' && (
+              {activeTab !== 'dashboard' && activeTab !== 'users' && (
                 <div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18}/><input type="text" placeholder="Cari..." className="pl-10 pr-4 py-3 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500 w-64 shadow-sm" onChange={(e) => setSearch(e.target.value)}/></div>
               )}
             </div>
@@ -362,6 +393,43 @@ const App = () => {
                   <tbody className="divide-y divide-slate-50">{produkList.map(p => (<tr key={p.id} className="hover:bg-slate-50 transition-colors"><td className="px-6 py-5 font-bold text-slate-700">{p.nama}</td><td className="px-6 py-5 text-center font-bold text-blue-600">{p.stok}</td><td className="px-6 py-5 text-right font-black">Rp {p.hargaEcer.toLocaleString('id-ID')}</td><td className="px-6 py-5 text-center flex justify-center gap-2"><button onClick={() => { setEditId(p.id); setNewItem({name:p.nama,category:p.kategori,stockPcs:p.stok.toString(),pricePcs:p.hargaEcer.toString(),barcode:p.barcode}); setShowAddModal(true); }} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"><Edit size={18}/></button><button onClick={() => clickHapusButton(p.id)} className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100"><Trash2 size={18}/></button></td></tr>))}</tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {/* USERS MANAGEMENT TAB (ADMIN ONLY - NEW) */}
+          {activeTab === 'users' && currentUser.role === 'admin' && (
+            <div className="max-w-4xl mx-auto">
+                <div className="flex justify-between items-end mb-8">
+                    <div>
+                        <h2 className="text-xl font-bold text-slate-700">Daftar Akun</h2>
+                        <p className="text-sm text-slate-400">Kelola akses masuk staf dan admin.</p>
+                    </div>
+                    <button onClick={() => setShowAddUserModal(true)} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-blue-200 transition-all"><UserPlus size={20}/> Tambah Akun</button>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {dbUsers.map(user => (
+                        <div key={user.id} className="bg-white p-6 rounded-2xl border border-slate-100 hover:shadow-lg transition-all relative overflow-hidden group">
+                            {user.role === 'admin' && <div className="absolute top-0 right-0 bg-purple-100 text-purple-600 text-[10px] font-bold px-3 py-1 rounded-bl-xl">ADMIN</div>}
+                            <div className="flex items-center gap-4">
+                                <div className={`w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold ${user.role === 'admin' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
+                                    {user.nama.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-slate-800 text-lg">{user.nama}</h3>
+                                    <p className="text-slate-400 text-sm">@{user.username}</p>
+                                </div>
+                            </div>
+                            <div className="mt-6 flex justify-between items-center border-t border-dashed border-slate-100 pt-4">
+                                <span className="text-xs font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded">Pass: ••••••</span>
+                                {user.id !== currentUser.id && (
+                                    <button onClick={() => handleDeleteUser(user.id)} className="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition-all"><Trash2 size={18}/></button>
+                                )}
+                                {user.id === currentUser.id && <span className="text-xs text-green-500 font-bold bg-green-50 px-2 py-1 rounded">Aktif</span>}
+                            </div>
+                        </div>
+                    ))}
+                </div>
             </div>
           )}
 
@@ -423,18 +491,49 @@ const App = () => {
         </div>
       )}
 
-      {/* NEW: MODAL SUKSES GANTI PASSWORD */}
+      {/* MODAL SUKSES GANTI PASSWORD */}
       {showPassSuccess && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[160] p-4">
             <div className="bg-white p-10 rounded-[3rem] text-center shadow-2xl w-full max-w-sm animate-pop-in border-4 border-white">
-                <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-green-200">
-                    <ShieldCheck size={48} className="text-green-600"/>
-                </div>
+                <div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-green-200"><ShieldCheck size={48} className="text-green-600"/></div>
                 <h2 className="text-2xl font-black text-slate-800 mb-2">Password Diubah!</h2>
                 <p className="text-slate-400 text-sm mb-8 leading-relaxed">Password Anda berhasil diperbarui.<br/>Silakan login kembali untuk keamanan.</p>
-                <button onClick={handleLogout} className="w-full bg-slate-800 hover:bg-slate-900 text-white py-4 rounded-xl font-bold flex items-center gap-2 justify-center transition-all shadow-xl">
-                    LOGIN ULANG <ArrowRight size={18}/>
-                </button>
+                <button onClick={handleLogout} className="w-full bg-slate-800 hover:bg-slate-900 text-white py-4 rounded-xl font-bold flex items-center gap-2 justify-center transition-all shadow-xl">LOGIN ULANG <ArrowRight size={18}/></button>
+            </div>
+        </div>
+      )}
+
+      {/* NEW: MODAL TAMBAH USER */}
+      {showAddUserModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[150] p-4">
+            <div className="bg-white w-full max-w-md rounded-[2rem] p-8 shadow-2xl animate-pop-in border-4 border-white relative">
+                <button onClick={() => setShowAddUserModal(false)} className="absolute top-6 right-6 text-slate-300 hover:text-slate-500"><XCircle/></button>
+                <h2 className="text-2xl font-black text-slate-800 mb-1 flex items-center gap-2"><UserPlus className="text-blue-600"/> Tambah Akun</h2>
+                <p className="text-sm text-slate-400 mb-6">Buat akses baru untuk admin atau kasir.</p>
+                
+                <div className="space-y-4">
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase ml-1">Nama Lengkap</label>
+                        <input type="text" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500 transition-all" value={newUser.nama} onChange={e => setNewUser({...newUser, nama: e.target.value})} placeholder="Contoh: Budi Santoso"/>
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase ml-1">Username Login</label>
+                        <input type="text" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500 transition-all" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} placeholder="tanpa spasi (ex: budi)"/>
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase ml-1">Password</label>
+                        <input type="text" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500 transition-all" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} placeholder="*******"/>
+                    </div>
+                    <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase ml-1">Role / Jabatan</label>
+                        <select className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500 transition-all" value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}>
+                            <option value="kasir">Kasir (Staf)</option>
+                            <option value="admin">Admin (Full Akses)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button onClick={handleAddUser} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-black shadow-lg mt-8 transition-all">SIMPAN AKUN</button>
             </div>
         </div>
       )}

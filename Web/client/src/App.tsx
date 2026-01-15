@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   LayoutGrid, ShoppingCart, Package, History, Search, LayoutDashboard,
-  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, AlertTriangle, Wallet, ArrowRight, XCircle
+  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, AlertTriangle, Wallet, ArrowRight, XCircle, Percent
 } from 'lucide-react';
 
 // --- DATA AWAL (DUMMY) ---
@@ -34,6 +34,8 @@ interface HistoryTransaksi {
   tanggal: string;
   waktu: string;
   items: ItemKeranjang[];
+  subtotalAwal: number; // Tambahan
+  diskon: number;       // Tambahan
   total: number;
 }
 
@@ -55,6 +57,7 @@ const App = () => {
 
   // State Transaksi
   const [keranjang, setKeranjang] = useState<ItemKeranjang[]>([]);
+  const [diskon, setDiskon] = useState<number>(0); // STATE DISKON BARU
   const [search, setSearch] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
   
@@ -62,8 +65,8 @@ const App = () => {
   const [showEmptyWarning, setShowEmptyWarning] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false); 
   const [showSaveSuccess, setShowSaveSuccess] = useState(false); 
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false); // STATE BARU UTK HAPUS
-  const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null); // TARGET HAPUS
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
   
   const [showAddModal, setShowAddModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -78,7 +81,13 @@ const App = () => {
 
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
-  // --- EFFECT: SIMPAN PERUBAHAN KE LOCALSTORAGE ---
+  // --- CALCULATIONS ---
+  // Menghitung Subtotal Kotor
+  const subtotalKotor = useMemo(() => keranjang.reduce((a, b) => a + b.subtotal, 0), [keranjang]);
+  // Menghitung Total Bersih (Setelah Diskon)
+  const totalBayarAkhir = Math.max(0, subtotalKotor - diskon);
+
+  // --- EFFECT ---
   useEffect(() => {
     localStorage.setItem('db_produk', JSON.stringify(produkList));
   }, [produkList]);
@@ -120,14 +129,15 @@ const App = () => {
     setIsLoading(true);
 
     setTimeout(() => {
-        const totalBelanja = keranjang.reduce((a, b) => a + b.subtotal, 0);
         const now = new Date();
         const trx: HistoryTransaksi = { 
             id: `INV-${Date.now()}`, 
             tanggal: now.toLocaleDateString('id-ID'), 
             waktu: now.toLocaleTimeString('id-ID'),
-            items: [...keranjang], 
-            total: totalBelanja 
+            items: [...keranjang],
+            subtotalAwal: subtotalKotor, // Simpan Subtotal
+            diskon: diskon,              // Simpan Diskon
+            total: totalBayarAkhir       // Simpan Total Akhir
         };
 
         setRiwayat([trx, ...riwayat]);
@@ -138,51 +148,28 @@ const App = () => {
 
         setLastTrx(trx);
         setKeranjang([]);
+        setDiskon(0); // Reset Diskon
         setIsLoading(false);
         setShowSuccess(true);
     }, 800);
   };
 
 
-  // --- LOGIKA INVENTORY ---
+  // --- LOGIKA INVENTORY & DELETE ---
   const handleSimpanProduk = () => {
     if (!newItem.name || !newItem.pricePcs) return alert("Nama dan Harga Wajib diisi!");
-    
     const productData = {
-        nama: newItem.name,
-        kategori: newItem.category,
-        stok: parseInt(newItem.stockPcs) || 0,
-        hargaEcer: parseInt(newItem.pricePcs) || 0,
-        barcode: newItem.barcode
+        nama: newItem.name, kategori: newItem.category, stok: parseInt(newItem.stockPcs) || 0, hargaEcer: parseInt(newItem.pricePcs) || 0, barcode: newItem.barcode
     };
 
-    if (editId) {
-        setProdukList(produkList.map(p => p.id === editId ? { ...p, ...productData } : p));
-    } else {
-        const newId = produkList.length > 0 ? Math.max(...produkList.map(p => p.id)) + 1 : 1;
-        setProdukList([...produkList, { id: newId, ...productData }]);
-    }
-    setShowAddModal(false);
-    setShowSaveSuccess(true);
+    if (editId) { setProdukList(produkList.map(p => p.id === editId ? { ...p, ...productData } : p)); } 
+    else { const newId = produkList.length > 0 ? Math.max(...produkList.map(p => p.id)) + 1 : 1; setProdukList([...produkList, { id: newId, ...productData }]); }
+    setShowAddModal(false); setShowSaveSuccess(true);
   };
   
-  // LOGIKA HAPUS (DIPISAH UNTUK MODAL)
-  const clickHapusButton = (id: number) => {
-      setDeleteTargetId(id);
-      setShowDeleteConfirm(true);
-  };
-
-  const executeDelete = () => {
-      if (deleteTargetId !== null) {
-        setProdukList(produkList.filter(p => p.id !== deleteTargetId));
-        setShowDeleteConfirm(false);
-        setDeleteTargetId(null);
-      }
-  };
-
-  const hapusSemuaRiwayat = () => { 
-      if(confirm("Hapus SEMUA riwayat transaksi?")) { setRiwayat([]); } 
-  };
+  const clickHapusButton = (id: number) => { setDeleteTargetId(id); setShowDeleteConfirm(true); };
+  const executeDelete = () => { if (deleteTargetId !== null) { setProdukList(produkList.filter(p => p.id !== deleteTargetId)); setShowDeleteConfirm(false); setDeleteTargetId(null); } };
+  const hapusSemuaRiwayat = () => { if(confirm("Hapus SEMUA riwayat transaksi?")) { setRiwayat([]); } };
 
 
   // --- LOGIKA DASHBOARD ---
@@ -190,21 +177,16 @@ const App = () => {
     const totalOmset = riwayat.reduce((acc, curr) => acc + curr.total, 0);
     const totalTransaksi = riwayat.length;
     const itemsTerjual = riwayat.reduce((acc, curr) => acc + curr.items.reduce((a, b) => a + b.qty, 0), 0);
-    const stokMenipis = produkList.filter(p => p.stok < 10).sort((a, b) => a.stok - b.stok);
     const chartData = [...Array(7)].map((_, i) => {
-        const d = new Date(); d.setDate(d.getDate() - i); 
-        const dateStr = d.toLocaleDateString('id-ID');
+        const d = new Date(); d.setDate(d.getDate() - i); const dateStr = d.toLocaleDateString('id-ID');
         const total = riwayat.filter(r => r.tanggal === dateStr).reduce((acc, curr) => acc + curr.total, 0);
         return { date: dateStr.split('/')[0], total }; 
     }).reverse();
     const maxOmset = Math.max(...chartData.map(d => d.total), 100000); 
-
-    // Top Produk Logic
     const salesMap: Record<string, number> = {};
     riwayat.forEach(t => { t.items.forEach(i => { salesMap[i.nama] = (salesMap[i.nama] || 0) + i.qty; }); });
     const topProduk = Object.entries(salesMap).sort(([, a], [, b]) => b - a).slice(0, 5);
-
-    return { totalOmset, totalTransaksi, itemsTerjual, stokMenipis, topProduk, chartData, maxOmset };
+    return { totalOmset, totalTransaksi, itemsTerjual, topProduk, chartData, maxOmset };
   }, [riwayat, produkList]);
 
 
@@ -212,19 +194,26 @@ const App = () => {
 
   return (
     <div className="flex h-screen bg-[#F8FAFC] font-sans overflow-hidden">
-      {/* CSS ANIMASI TAMBAHAN */}
       <style>{`
-        @keyframes popIn {
-          0% { transform: scale(0.8); opacity: 0; }
-          100% { transform: scale(1); opacity: 1; }
-        }
+        @keyframes popIn { 0% { transform: scale(0.8); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
         .animate-pop-in { animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
         @media print { body * { visibility: hidden; } #struk-print, #struk-print * { visibility: visible; } #struk-print { display: block !important; position: absolute; left: 0; top: 0; width: 100%; } @page { margin: 0; size: auto; } }
       `}</style>
 
-      {/* STRUK PRINT HIDDEN */}
+      {/* STRUK PRINT (UPDATED WITH DISCOUNT) */}
       <div id="struk-print" className="hidden font-mono text-sm max-w-[80mm] mx-auto bg-white p-4">
-        {lastTrx && <div className="text-center"><h2 className="font-bold">TOKO MAJU JAYA</h2><p className="text-xs">{lastTrx.tanggal} {lastTrx.waktu}</p><p className="text-xs">No: {lastTrx.id}</p><hr className="border-dashed border-black my-2"/><div className="text-left">{lastTrx.items.map(i => (<div key={i.id} className="flex justify-between"><span>{i.nama} <span className="text-[10px]"><br/>{i.qty} x {i.hargaEcer.toLocaleString()}</span></span><span>{i.subtotal.toLocaleString()}</span></div>))}</div><hr className="border-dashed border-black my-2"/><div className="flex justify-between font-bold"><span>TOTAL</span><span>Rp {lastTrx.total.toLocaleString()}</span></div></div>}
+        {lastTrx && <div className="text-center">
+            <h2 className="font-bold">TOKO MAJU JAYA</h2>
+            <p className="text-xs">{lastTrx.tanggal} {lastTrx.waktu}</p>
+            <p className="text-xs">No: {lastTrx.id}</p>
+            <hr className="border-dashed border-black my-2"/>
+            <div className="text-left">{lastTrx.items.map(i => (<div key={i.id} className="flex justify-between"><span>{i.nama} <span className="text-[10px]"><br/>{i.qty} x {i.hargaEcer.toLocaleString()}</span></span><span>{i.subtotal.toLocaleString()}</span></div>))}</div>
+            <hr className="border-dashed border-black my-2"/>
+            <div className="flex justify-between text-xs"><span>Subtotal</span><span>{lastTrx.subtotalAwal?.toLocaleString() || lastTrx.total.toLocaleString()}</span></div>
+            {lastTrx.diskon > 0 && <div className="flex justify-between text-xs mb-1"><span>Diskon</span><span>-{lastTrx.diskon.toLocaleString()}</span></div>}
+            <div className="flex justify-between font-bold text-lg mt-1 pt-1 border-t border-black"><span>TOTAL</span><span>Rp {lastTrx.total.toLocaleString()}</span></div>
+            <p className="text-center text-xs mt-4">Terima Kasih</p>
+        </div>}
       </div>
 
       {/* SIDEBAR */}
@@ -275,7 +264,6 @@ const App = () => {
                     <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm"><h3 className="text-4xl font-black text-slate-800">{stats.totalTransaksi}</h3><p className="text-slate-400 text-sm">Transaksi</p></div>
                     <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm"><h3 className="text-4xl font-black text-slate-800">{stats.itemsTerjual}</h3><p className="text-slate-400 text-sm">Item Terjual</p></div>
                 </div>
-                
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div className="lg:col-span-2 bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
                         <div className="flex items-center gap-3 mb-8"><div className="p-2 bg-slate-100 rounded-lg"><TrendingUp size={20} className="text-slate-600"/></div><h3 className="font-bold text-slate-800">Grafik 7 Hari</h3></div>
@@ -319,7 +307,7 @@ const App = () => {
           {activeTab === 'history' && (
             <div className="space-y-4 max-w-4xl pb-10">
               {riwayat.length > 0 && <button onClick={hapusSemuaRiwayat} className="mb-4 text-red-500 text-sm font-bold flex items-center gap-2 hover:bg-red-50 px-4 py-2 rounded-lg w-fit"><Eraser size={16}/> Hapus Semua</button>}
-              {riwayat.map(h => (<div key={h.id} className="bg-white p-6 rounded-2xl border border-slate-100 flex justify-between items-center shadow-sm hover:shadow-md transition-all"><div className="flex items-center gap-5"><div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><ReceiptText/></div><div><p className="font-bold text-slate-800 text-lg">{h.id}</p><p className="text-sm text-slate-400 font-medium">{h.tanggal} - {h.waktu}</p></div></div><div className="text-right"><p className="font-black text-blue-600 text-xl">Rp {h.total.toLocaleString('id-ID')}</p><button onClick={() => { setLastTrx(h); setTimeout(() => window.print(), 100); }} className="text-xs font-bold text-slate-400 hover:text-blue-600 flex items-center gap-1 justify-end mt-2"><Printer size={14}/> CETAK NOTA</button></div></div>))}
+              {riwayat.map(h => (<div key={h.id} className="bg-white p-6 rounded-2xl border border-slate-100 flex justify-between items-center shadow-sm hover:shadow-md transition-all"><div className="flex items-center gap-5"><div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><ReceiptText/></div><div><p className="font-bold text-slate-800 text-lg">{h.id}</p><p className="text-sm text-slate-400 font-medium">{h.tanggal} - {h.waktu}</p><div className="flex gap-2 mt-1"><span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-500">Item: {h.items.length}</span>{h.diskon > 0 && <span className="text-[10px] bg-red-100 px-2 py-0.5 rounded text-red-500">Disc: Rp{h.diskon.toLocaleString()}</span>}</div></div></div><div className="text-right"><p className="font-black text-blue-600 text-xl">Rp {h.total.toLocaleString('id-ID')}</p><button onClick={() => { setLastTrx(h); setTimeout(() => window.print(), 100); }} className="text-xs font-bold text-slate-400 hover:text-blue-600 flex items-center gap-1 justify-end mt-2"><Printer size={14}/> CETAK NOTA</button></div></div>))}
             </div>
           )}
         </main>
@@ -327,57 +315,57 @@ const App = () => {
         {/* KERANJANG (HANYA DI POS) */}
         {activeTab === 'pos' && (
           <aside className="w-[400px] bg-white border-l border-slate-100 p-8 flex flex-col shadow-2xl z-30">
-            <h2 className="text-2xl font-black text-slate-800 mb-8 flex items-center gap-3"><ShoppingCart className="text-blue-600" size={28}/> Pesanan</h2>
-            <div className="flex-1 overflow-y-auto space-y-4 pr-2 scrollbar-thin">
+            <h2 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-3"><ShoppingCart className="text-blue-600" size={28}/> Pesanan</h2>
+            
+            {/* List Barang */}
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2 scrollbar-thin mb-4">
               {keranjang.length === 0 && <div className="text-center text-slate-400 mt-20">Keranjang Kosong.</div>}
               {keranjang.map(item => (<div key={item.id} className="flex justify-between items-start bg-slate-50 p-4 rounded-2xl border border-transparent hover:border-blue-200 transition-all"><div><p className="font-bold text-sm text-slate-700 line-clamp-1">{item.nama}</p><div className="flex items-center gap-2 mt-1"><span className="text-xs font-bold bg-white px-2 py-1 rounded border">{item.qty}x</span><span className="text-xs text-slate-400">@ {item.hargaEcer.toLocaleString()}</span></div></div><div className="text-right"><p className="font-bold text-slate-700 text-sm">Rp {item.subtotal.toLocaleString()}</p><button onClick={() => setKeranjang(keranjang.filter(i => i.id !== item.id))} className="text-red-400 hover:text-red-600 text-[10px] mt-1 font-bold">HAPUS</button></div></div>))}
             </div>
-            <div className="pt-6 border-t border-dashed border-slate-200 mt-6 bg-white"><div className="flex justify-between items-end mb-6"><span className="font-bold text-slate-400 text-sm">TOTAL BAYAR</span><span className="text-4xl font-black text-blue-600 tracking-tighter">Rp {keranjang.reduce((acc, i) => acc + i.subtotal, 0).toLocaleString('id-ID')}</span></div><button onClick={handleBayar} disabled={isLoading} className={`w-full py-5 rounded-2xl font-black shadow-xl text-lg flex justify-center items-center gap-2 transition-all ${isLoading ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-[1.02]'}`}>{isLoading ? 'MEMPROSES...' : 'BAYAR SEKARANG'}</button></div>
+
+            {/* Bagian Bawah: Diskon & Total */}
+            <div className="pt-4 border-t border-dashed border-slate-200 bg-white">
+                <div className="flex justify-between items-center mb-3">
+                    <span className="text-slate-400 text-sm font-medium">Subtotal</span>
+                    <span className="font-bold text-slate-700">Rp {subtotalKotor.toLocaleString()}</span>
+                </div>
+                
+                {/* INPUT DISKON */}
+                <div className="bg-slate-50 p-3 rounded-xl mb-6 flex items-center gap-3 border border-slate-200 focus-within:border-blue-400 focus-within:ring-2 ring-blue-100 transition-all">
+                    <div className="p-2 bg-white rounded-lg text-slate-400"><Percent size={16}/></div>
+                    <div className="flex-1">
+                        <label className="text-[10px] font-bold text-slate-400 block uppercase tracking-wide">Potongan Harga (Rp)</label>
+                        <input 
+                            type="number" 
+                            className="bg-transparent w-full font-bold text-slate-700 outline-none placeholder:text-slate-300"
+                            placeholder="0"
+                            value={diskon > 0 ? diskon : ""}
+                            onChange={(e) => {
+                                const val = parseInt(e.target.value);
+                                setDiskon(isNaN(val) ? 0 : val);
+                            }}
+                        />
+                    </div>
+                </div>
+
+                <div className="flex justify-between items-end mb-6">
+                    <span className="font-bold text-slate-800 text-lg">TOTAL</span>
+                    <span className="text-4xl font-black text-blue-600 tracking-tighter">Rp {totalBayarAkhir.toLocaleString('id-ID')}</span>
+                </div>
+                
+                <button onClick={handleBayar} disabled={isLoading} className={`w-full py-5 rounded-2xl font-black shadow-xl text-lg flex justify-center items-center gap-2 transition-all ${isLoading ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-[1.02]'}`}>
+                    {isLoading ? 'MEMPROSES...' : 'BAYAR SEKARANG'}
+                </button>
+            </div>
           </aside>
         )}
       </div>
 
-      {/* --- MODAL POPUPS --- */}
-      
-      {/* 1. SUCCESS TRANSAKSI */}
-      {showSuccess && <div className="fixed inset-0 bg-blue-900/40 backdrop-blur-md flex items-center justify-center z-[100] p-4"><div className="bg-white p-10 rounded-[3rem] text-center shadow-2xl w-full max-w-sm animate-pop-in"><div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle2 size={40} className="text-green-600"/></div><h2 className="text-2xl font-black text-slate-800 mb-2">Transaksi Berhasil!</h2><p className="text-slate-400 text-sm mb-6">Stok telah dikurangi & data tersimpan.</p><div className="space-y-3"><button onClick={() => window.print()} className="w-full bg-slate-800 hover:bg-slate-900 text-white py-4 rounded-xl font-bold flex items-center gap-2 justify-center transition-all"><Printer size={20}/> CETAK STRUK</button><button onClick={() => setShowSuccess(false)} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-4 rounded-xl font-bold transition-all">Tutup</button></div></div></div>}
-      
-      {/* 2. ADD/EDIT PRODUK */}
+      {/* --- MODAL POPUPS (ALL INCLUDED) --- */}
+      {showSuccess && <div className="fixed inset-0 bg-blue-900/40 backdrop-blur-md flex items-center justify-center z-[100] p-4"><div className="bg-white p-10 rounded-[3rem] text-center shadow-2xl w-full max-w-sm animate-pop-in"><div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle2 size={40} className="text-green-600"/></div><h2 className="text-2xl font-black text-slate-800 mb-2">Transaksi Berhasil!</h2><p className="text-slate-400 text-sm mb-6">Data tersimpan & Stok berkurang.</p><div className="space-y-3"><button onClick={() => window.print()} className="w-full bg-slate-800 hover:bg-slate-900 text-white py-4 rounded-xl font-bold flex items-center gap-2 justify-center transition-all"><Printer size={20}/> CETAK STRUK</button><button onClick={() => setShowSuccess(false)} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-4 rounded-xl font-bold transition-all">Tutup</button></div></div></div>}
       {showAddModal && <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4"><div className="bg-white w-full max-w-lg rounded-[2rem] p-8 shadow-2xl animate-pop-in"><h2 className="text-2xl font-black text-slate-800 mb-6">{editId?"Edit":"Tambah"} Produk</h2><div className="space-y-4"><div className="relative"><ScanBarcode className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18}/><input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 font-bold font-mono focus:border-blue-500 outline-none" value={newItem.barcode} onChange={e=>setNewItem({...newItem,barcode:e.target.value})} placeholder="Scan Barcode Disini..."/></div><input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:border-blue-500 outline-none" value={newItem.name} onChange={e=>setNewItem({...newItem,name:e.target.value})} placeholder="Nama Produk"/><div className="grid grid-cols-2 gap-4"><input type="number" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:border-blue-500 outline-none" value={newItem.stockPcs} onChange={e=>setNewItem({...newItem,stockPcs:e.target.value})} placeholder="Stok"/><input type="number" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:border-blue-500 outline-none" value={newItem.pricePcs} onChange={e=>setNewItem({...newItem,pricePcs:e.target.value})} placeholder="Harga"/></div></div><div className="grid grid-cols-2 gap-4 mt-8"><button onClick={()=>setShowAddModal(false)} className="py-4 font-bold text-slate-400 hover:bg-slate-50 rounded-xl">Batal</button><button onClick={handleSimpanProduk} className="bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-black shadow-lg transition-all">SIMPAN</button></div></div></div>}
-
-      {/* 3. SAVE SUCCESS */}
       {showSaveSuccess && <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-[110] p-4"><div className="bg-white p-8 rounded-[2rem] text-center shadow-2xl w-full max-w-xs animate-pop-in"><div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4"><CheckCircle2 size={32} className="text-blue-600"/></div><h2 className="text-xl font-black text-slate-800 mb-2">Sukses Disimpan!</h2><p className="text-slate-400 text-xs mb-6">Data produk berhasil diperbarui.</p><button onClick={() => setShowSaveSuccess(false)} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2">MANTAP <ArrowRight size={18}/></button></div></div>}
-
-      {/* 4. DELETE CONFIRMATION (BARU!) */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-red-900/40 backdrop-blur-md flex items-center justify-center z-[120] p-4">
-            <div className="bg-white p-8 rounded-[2rem] text-center shadow-2xl w-full max-w-sm animate-pop-in border-4 border-white">
-                <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse">
-                    <Trash2 size={40} className="text-red-500"/>
-                </div>
-                <h2 className="text-2xl font-black text-slate-800 mb-2">Hapus Produk Ini?</h2>
-                <p className="text-slate-500 text-sm mb-8 leading-relaxed">
-                   Tindakan ini tidak bisa dibatalkan.<br/>Data produk akan hilang permanen.
-                </p>
-                <div className="grid grid-cols-2 gap-3">
-                    <button 
-                        onClick={() => setShowDeleteConfirm(false)} 
-                        className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 rounded-xl font-bold transition-all"
-                    >
-                        Batal
-                    </button>
-                    <button 
-                        onClick={executeDelete} 
-                        className="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-red-200 transition-all flex items-center justify-center gap-2"
-                    >
-                        Ya, Hapus
-                    </button>
-                </div>
-            </div>
-        </div>
-      )}
-
-      {/* 5. WARNING EMPTY */}
+      {showDeleteConfirm && <div className="fixed inset-0 bg-red-900/40 backdrop-blur-md flex items-center justify-center z-[120] p-4"><div className="bg-white p-8 rounded-[2rem] text-center shadow-2xl w-full max-w-sm animate-pop-in border-4 border-white"><div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse"><Trash2 size={40} className="text-red-500"/></div><h2 className="text-2xl font-black text-slate-800 mb-2">Hapus Produk Ini?</h2><p className="text-slate-500 text-sm mb-8 leading-relaxed">Tindakan ini tidak bisa dibatalkan.<br/>Data produk akan hilang permanen.</p><div className="grid grid-cols-2 gap-3"><button onClick={() => setShowDeleteConfirm(false)} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 rounded-xl font-bold transition-all">Batal</button><button onClick={executeDelete} className="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-red-200 transition-all flex items-center justify-center gap-2">Ya, Hapus</button></div></div></div>}
       {showEmptyWarning && <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[100]"><div className="bg-white p-10 rounded-[3rem] text-center shadow-2xl animate-pop-in"><div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6"><ShoppingCart size={40} className="text-amber-500"/></div><h2 className="text-2xl font-black text-slate-800">Keranjang Kosong</h2><p className="text-slate-400 mt-2">Pilih barang dulu sebelum bayar.</p><button onClick={()=>setShowEmptyWarning(false)} className="mt-6 w-full bg-slate-100 hover:bg-slate-200 py-3 rounded-xl font-bold transition-all">OK, Siap</button></div></div>}
     </div>
   );

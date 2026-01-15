@@ -158,8 +158,8 @@ app.put('/api/products/:id', async (req, res) => {
     });
     res.json({ success: true, data: updatedProduct });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Gagal mengupdate produk." });
-  }
+      res.status(400).json({ success: false, message: error.message });  
+    }
 });
 
 app.listen(PORT, () => {

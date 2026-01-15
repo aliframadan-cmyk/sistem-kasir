@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   LayoutGrid, ShoppingCart, Package, History, Search, LayoutDashboard,
-  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, AlertTriangle, Wallet, ArrowRight, XCircle, Percent
+  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, Percent
 } from 'lucide-react';
 
 // --- DATA AWAL (DUMMY) ---
@@ -34,8 +34,8 @@ interface HistoryTransaksi {
   tanggal: string;
   waktu: string;
   items: ItemKeranjang[];
-  subtotalAwal: number; // Tambahan
-  diskon: number;       // Tambahan
+  subtotalAwal: number;
+  diskon: number;
   total: number;
 }
 
@@ -57,7 +57,7 @@ const App = () => {
 
   // State Transaksi
   const [keranjang, setKeranjang] = useState<ItemKeranjang[]>([]);
-  const [diskon, setDiskon] = useState<number>(0); // STATE DISKON BARU
+  const [diskon, setDiskon] = useState<number>(0); // State Diskon
   const [search, setSearch] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
   
@@ -135,9 +135,9 @@ const App = () => {
             tanggal: now.toLocaleDateString('id-ID'), 
             waktu: now.toLocaleTimeString('id-ID'),
             items: [...keranjang],
-            subtotalAwal: subtotalKotor, // Simpan Subtotal
-            diskon: diskon,              // Simpan Diskon
-            total: totalBayarAkhir       // Simpan Total Akhir
+            subtotalAwal: subtotalKotor,
+            diskon: diskon,
+            total: totalBayarAkhir
         };
 
         setRiwayat([trx, ...riwayat]);
@@ -200,7 +200,7 @@ const App = () => {
         @media print { body * { visibility: hidden; } #struk-print, #struk-print * { visibility: visible; } #struk-print { display: block !important; position: absolute; left: 0; top: 0; width: 100%; } @page { margin: 0; size: auto; } }
       `}</style>
 
-      {/* STRUK PRINT (UPDATED WITH DISCOUNT) */}
+      {/* STRUK PRINT */}
       <div id="struk-print" className="hidden font-mono text-sm max-w-[80mm] mx-auto bg-white p-4">
         {lastTrx && <div className="text-center">
             <h2 className="font-bold">TOKO MAJU JAYA</h2>
@@ -330,23 +330,59 @@ const App = () => {
                     <span className="font-bold text-slate-700">Rp {subtotalKotor.toLocaleString()}</span>
                 </div>
                 
-                {/* INPUT DISKON */}
-                <div className="bg-slate-50 p-3 rounded-xl mb-6 flex items-center gap-3 border border-slate-200 focus-within:border-blue-400 focus-within:ring-2 ring-blue-100 transition-all">
-                    <div className="p-2 bg-white rounded-lg text-slate-400"><Percent size={16}/></div>
-                    <div className="flex-1">
-                        <label className="text-[10px] font-bold text-slate-400 block uppercase tracking-wide">Potongan Harga (Rp)</label>
+                {/* --- UPDATE: INPUT DISKON YANG DIPERBAIKI --- */}
+                <div className="bg-slate-50 p-3 rounded-xl mb-6 border border-slate-200 focus-within:border-blue-400 focus-within:ring-2 ring-blue-100 transition-all">
+                    <div className="flex items-center gap-2 mb-2">
+                        <div className="p-1.5 bg-white rounded-lg text-slate-400 shadow-sm"><Percent size={14}/></div>
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">Potongan Harga (Rp)</label>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                        {/* Tombol Kurang */}
+                        <button 
+                            onClick={() => setDiskon(Math.max(0, diskon - 500))}
+                            className="w-10 h-10 bg-white border border-slate-200 rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-500 hover:border-red-200 font-bold text-lg active:scale-90 transition-all"
+                        >
+                            -
+                        </button>
+
+                        {/* Input Angka Fixed */}
                         <input 
                             type="number" 
-                            className="bg-transparent w-full font-bold text-slate-700 outline-none placeholder:text-slate-300"
+                            className="flex-1 bg-white border border-slate-200 rounded-lg h-10 px-3 font-bold text-slate-700 text-center outline-none focus:border-blue-500"
                             placeholder="0"
-                            value={diskon > 0 ? diskon : ""}
+                            value={diskon} // Nilai 0 tetap muncul
+                            onFocus={(e) => e.target.select()} // Auto Select saat klik
                             onChange={(e) => {
                                 const val = parseInt(e.target.value);
                                 setDiskon(isNaN(val) ? 0 : val);
                             }}
                         />
+
+                        {/* Tombol Tambah */}
+                        <button 
+                            onClick={() => setDiskon(diskon + 500)}
+                            className="w-10 h-10 bg-white border border-slate-200 rounded-lg text-slate-500 hover:bg-blue-50 hover:text-blue-500 hover:border-blue-200 font-bold text-lg active:scale-90 transition-all"
+                        >
+                            +
+                        </button>
+                    </div>
+                    
+                    {/* Shortcut Cepat */}
+                    <div className="flex gap-2 mt-2 justify-center">
+                        {[1000, 2000, 5000].map(val => (
+                            <button 
+                                key={val}
+                                onClick={() => setDiskon(val)}
+                                className="text-[10px] bg-slate-200 hover:bg-slate-300 text-slate-600 px-2 py-1 rounded font-bold transition-colors"
+                            >
+                                {val/1000}k
+                            </button>
+                        ))}
+                         <button onClick={() => setDiskon(0)} className="text-[10px] bg-red-100 hover:bg-red-200 text-red-500 px-2 py-1 rounded font-bold transition-colors">Reset</button>
                     </div>
                 </div>
+                {/* --- END UPDATE --- */}
 
                 <div className="flex justify-between items-end mb-6">
                     <span className="font-bold text-slate-800 text-lg">TOTAL</span>
@@ -361,7 +397,7 @@ const App = () => {
         )}
       </div>
 
-      {/* --- MODAL POPUPS (ALL INCLUDED) --- */}
+      {/* --- MODAL POPUPS --- */}
       {showSuccess && <div className="fixed inset-0 bg-blue-900/40 backdrop-blur-md flex items-center justify-center z-[100] p-4"><div className="bg-white p-10 rounded-[3rem] text-center shadow-2xl w-full max-w-sm animate-pop-in"><div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle2 size={40} className="text-green-600"/></div><h2 className="text-2xl font-black text-slate-800 mb-2">Transaksi Berhasil!</h2><p className="text-slate-400 text-sm mb-6">Data tersimpan & Stok berkurang.</p><div className="space-y-3"><button onClick={() => window.print()} className="w-full bg-slate-800 hover:bg-slate-900 text-white py-4 rounded-xl font-bold flex items-center gap-2 justify-center transition-all"><Printer size={20}/> CETAK STRUK</button><button onClick={() => setShowSuccess(false)} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-4 rounded-xl font-bold transition-all">Tutup</button></div></div></div>}
       {showAddModal && <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4"><div className="bg-white w-full max-w-lg rounded-[2rem] p-8 shadow-2xl animate-pop-in"><h2 className="text-2xl font-black text-slate-800 mb-6">{editId?"Edit":"Tambah"} Produk</h2><div className="space-y-4"><div className="relative"><ScanBarcode className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18}/><input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 font-bold font-mono focus:border-blue-500 outline-none" value={newItem.barcode} onChange={e=>setNewItem({...newItem,barcode:e.target.value})} placeholder="Scan Barcode Disini..."/></div><input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:border-blue-500 outline-none" value={newItem.name} onChange={e=>setNewItem({...newItem,name:e.target.value})} placeholder="Nama Produk"/><div className="grid grid-cols-2 gap-4"><input type="number" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:border-blue-500 outline-none" value={newItem.stockPcs} onChange={e=>setNewItem({...newItem,stockPcs:e.target.value})} placeholder="Stok"/><input type="number" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:border-blue-500 outline-none" value={newItem.pricePcs} onChange={e=>setNewItem({...newItem,pricePcs:e.target.value})} placeholder="Harga"/></div></div><div className="grid grid-cols-2 gap-4 mt-8"><button onClick={()=>setShowAddModal(false)} className="py-4 font-bold text-slate-400 hover:bg-slate-50 rounded-xl">Batal</button><button onClick={handleSimpanProduk} className="bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-black shadow-lg transition-all">SIMPAN</button></div></div></div>}
       {showSaveSuccess && <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-[110] p-4"><div className="bg-white p-8 rounded-[2rem] text-center shadow-2xl w-full max-w-xs animate-pop-in"><div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4"><CheckCircle2 size={32} className="text-blue-600"/></div><h2 className="text-xl font-black text-slate-800 mb-2">Sukses Disimpan!</h2><p className="text-slate-400 text-xs mb-6">Data produk berhasil diperbarui.</p><button onClick={() => setShowSaveSuccess(false)} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2">MANTAP <ArrowRight size={18}/></button></div></div>}

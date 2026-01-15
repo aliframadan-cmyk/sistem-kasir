@@ -127,6 +127,30 @@ app.delete('/api/products/:id', async (req, res) => {
   }
 });
 
+// 5. API Update Produk
+app.put('/api/products/:id', async (req, res) => {
+  const { id } = req.params;
+  const { name, category, stockPcs, pricePcs, priceDus, barcode } = req.body;
+
+  try {
+    const updatedProduct = await prisma.product.update({
+      where: { id: parseInt(id) },
+      data: {
+        name,
+        category,
+        stockPcs: parseInt(stockPcs),
+        pricePcs: parseInt(pricePcs),
+        priceDus: parseInt(priceDus) || 0,
+        barcode: barcode || null,
+      },
+    });
+    res.json({ success: true, data: updatedProduct });
+  } catch (error) {
+    console.error("Gagal update:", error);
+    res.status(500).json({ success: false, message: "Gagal mengupdate produk." });
+  }
+});
+
 // JALANKAN SERVER
 app.listen(PORT, () => {
   console.log(`✅ Server berjalan di http://localhost:${PORT}`);

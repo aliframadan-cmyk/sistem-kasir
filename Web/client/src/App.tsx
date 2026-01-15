@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   LayoutGrid, ShoppingCart, Package, History, Search, 
-  Trash2, X, CheckCircle2, ReceiptText, AlertCircle, PlusCircle, Save
+  Trash2, X, CheckCircle2, ReceiptText, AlertCircle, PlusCircle, Save, Edit
 } from 'lucide-react';
 
 // --- Interfaces ---
@@ -10,7 +10,9 @@ interface Produk {
   nama: string;
   kategori: string;
   stok: number;     
-  hargaEcer: number; 
+  hargaEcer: number;
+  // Kita butuh data lengkap untuk mode edit, jadi kita simpan field asli DB juga secara tersembunyi
+  originalData?: any; 
 }
 
 interface ItemKeranjang extends Produk {
@@ -40,7 +42,8 @@ const App = () => {
   const [showAddModal, setShowAddModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Form Input Produk Baru
+  // Form Input Produk (Untuk Tambah & Edit)
+  const [editId, setEditId] = useState<number | null>(null); // Jika null = Mode Tambah, Jika ada angka = Mode Edit
   const [newItem, setNewItem] = useState({
     name: "",
     category: "Sembako",
@@ -55,13 +58,16 @@ const App = () => {
     try {
       const response = await fetch('http://localhost:3000/api/products');
       const data = await response.json();
+      
       const formattedData = data.map((item: any) => ({
         id: item.id,
         nama: item.name,
         kategori: item.category,
         stok: item.stockPcs,
-        hargaEcer: item.pricePcs
+        hargaEcer: item.pricePcs,
+        originalData: item // Simpan data mentah untuk keperluan edit
       }));
+      
       setProdukList(formattedData);
     } catch (error) {
       console.error("Gagal koneksi ke server:", error);
@@ -70,24 +76,59 @@ const App = () => {
 
   useEffect(() => { fetchProducts(); }, []);
 
-  // --- FUNGSI 2: TAMBAH BARANG ---
+  // --- FUNGSI 2: PERSIAPAN EDIT & TAMBAH ---
+  
+  // Klik Tombol "+ Tambah"
+  const handleOpenAdd = () => {
+    setEditId(null); // Mode Tambah
+    setNewItem({ name: "", category: "Sembako", stockPcs: "", pricePcs: "", priceDus: "", barcode: "" });
+    setShowAddModal(true);
+  };
+
+  // Klik Tombol "Pensil (Edit)"
+  const handleOpenEdit = (produk: Produk) => {
+    setEditId(produk.id); // Mode Edit
+    const data = produk.originalData;
+    
+    // Isi form dengan data yang sudah ada
+    setNewItem({
+      name: data.name,
+      category: data.category,
+      stockPcs: data.stockPcs.toString(),
+      pricePcs: data.pricePcs.toString(),
+      priceDus: data.priceDus ? data.priceDus.toString() : "",
+      barcode: data.barcode || ""
+    });
+    
+    setShowAddModal(true);
+  };
+
+  // --- FUNGSI 3: SIMPAN DATA (Bisa Create atau Update) ---
   const handleSimpanProduk = async () => {
     if (!newItem.name || !newItem.pricePcs) return alert("Nama dan Harga Ecer wajib diisi!");
     
     setIsLoading(true);
     try {
-      const response = await fetch('http://localhost:3000/api/products', {
-        method: 'POST',
+      let url = 'http://localhost:3000/api/products';
+      let method = 'POST';
+
+      // Jika Mode Edit, ubah URL dan Method
+      if (editId) {
+        url = `http://localhost:3000/api/products/${editId}`;
+        method = 'PUT';
+      }
+
+      const response = await fetch(url, {
+        method: method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newItem)
       });
       const result = await response.json();
 
       if (result.success) {
-        alert("Produk Berhasil Ditambahkan!");
+        alert(editId ? "Produk Berhasil Diupdate!" : "Produk Berhasil Ditambahkan!");
         setShowAddModal(false);
-        setNewItem({ name: "", category: "Sembako", stockPcs: "", pricePcs: "", priceDus: "", barcode: "" });
-        fetchProducts();
+        fetchProducts(); // Refresh data
       } else {
         alert("Gagal: " + result.message);
       }
@@ -98,22 +139,12 @@ const App = () => {
     }
   };
 
-  // --- FUNGSI 3: HAPUS BARANG (BARU) ---
+  // --- FUNGSI 4: HAPUS BARANG ---
   const handleHapusProduk = async (id: number, nama: string) => {
-    if (!confirm(`Apakah Anda yakin ingin menghapus produk "${nama}"? Data yang dihapus tidak bisa dikembalikan.`)) return;
-
+    if (!confirm(`Hapus produk "${nama}"?`)) return;
     try {
-      const response = await fetch(`http://localhost:3000/api/products/${id}`, {
-        method: 'DELETE',
-      });
-      const result = await response.json();
-
-      if (result.success) {
-        // Hapus dari tampilan tanpa perlu refresh
-        setProdukList(produkList.filter(p => p.id !== id));
-      } else {
-        alert("Gagal menghapus: " + result.message);
-      }
+      await fetch(`http://localhost:3000/api/products/${id}`, { method: 'DELETE' });
+      setProdukList(produkList.filter(p => p.id !== id));
     } catch (error) {
       alert("Gagal menghubungi server.");
     }
@@ -165,7 +196,6 @@ const App = () => {
     }
   };
 
-  // --- Helper Hapus Riwayat ---
   const hapusSatuRiwayat = (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (confirm("Hapus catatan ini?")) setRiwayat(riwayat.filter(item => item.id !== id));
@@ -212,11 +242,11 @@ const App = () => {
             </div>
           )}
 
-          {/* INVENTORY VIEW (DENGAN DELETE) */}
+          {/* INVENTORY VIEW (UPDATE & DELETE) */}
           {activeTab === 'inventory' && (
             <div>
               <div className="flex justify-end mb-4">
-                <button onClick={() => setShowAddModal(true)} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-bold shadow-lg shadow-blue-500/30 transition-all active:scale-95">
+                <button onClick={handleOpenAdd} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-3 rounded-xl font-bold shadow-lg shadow-blue-500/30 transition-all active:scale-95">
                   <PlusCircle size={20}/> Tambah Produk Baru
                 </button>
               </div>
@@ -237,13 +267,24 @@ const App = () => {
                         <td className="px-8 py-5 text-center font-bold text-blue-600">{p.stok}</td>
                         <td className="px-8 py-5 text-right font-black">Rp {p.hargaEcer.toLocaleString('id-ID')}</td>
                         <td className="px-8 py-5 text-center">
-                          <button 
-                            onClick={() => handleHapusProduk(p.id, p.nama)} 
-                            className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-all shadow-sm"
-                            title="Hapus Produk"
-                          >
-                            <Trash2 size={18}/>
-                          </button>
+                          <div className="flex items-center justify-center gap-2">
+                            {/* TOMBOL EDIT */}
+                            <button 
+                                onClick={() => handleOpenEdit(p)}
+                                className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                                title="Edit Produk"
+                            >
+                                <Edit size={18}/>
+                            </button>
+                            {/* TOMBOL HAPUS */}
+                            <button 
+                              onClick={() => handleHapusProduk(p.id, p.nama)} 
+                              className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-all shadow-sm"
+                              title="Hapus Produk"
+                            >
+                              <Trash2 size={18}/>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -311,12 +352,15 @@ const App = () => {
         )}
       </div>
 
-      {/* --- MODAL TAMBAH BARANG --- */}
+      {/* --- MODAL INPUT (CREATE & EDIT) --- */}
       {showAddModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
           <div className="bg-white w-full max-w-lg rounded-[2rem] p-8 shadow-2xl overflow-hidden">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-black text-slate-800">Tambah Produk Baru</h2>
+              {/* Judul Berubah Tergantung Mode */}
+              <h2 className="text-2xl font-black text-slate-800">
+                {editId ? "Edit Produk" : "Tambah Produk Baru"}
+              </h2>
               <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600"><X size={24}/></button>
             </div>
             
@@ -340,7 +384,7 @@ const App = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Stok Awal (Pcs)</label>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Stok (Pcs)</label>
                   <input type="number" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 focus:border-blue-500 outline-none"
                     value={newItem.stockPcs} onChange={e => setNewItem({...newItem, stockPcs: e.target.value})} placeholder="0" />
                 </div>
@@ -348,12 +392,12 @@ const App = () => {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Harga Ecer (Per Pcs)</label>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Harga Ecer</label>
                   <input type="number" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 focus:border-blue-500 outline-none"
                     value={newItem.pricePcs} onChange={e => setNewItem({...newItem, pricePcs: e.target.value})} placeholder="Rp 0" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Harga Dus (Grosir)</label>
+                  <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Harga Dus</label>
                   <input type="number" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold text-slate-700 focus:border-blue-500 outline-none"
                     value={newItem.priceDus} onChange={e => setNewItem({...newItem, priceDus: e.target.value})} placeholder="Rp 0" />
                 </div>
@@ -367,7 +411,7 @@ const App = () => {
             </div>
 
             <button onClick={handleSimpanProduk} disabled={isLoading} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-black mt-8 shadow-lg shadow-blue-500/20 flex items-center justify-center gap-2">
-              <Save size={20}/> {isLoading ? 'Menyimpan...' : 'SIMPAN PRODUK'}
+              <Save size={20}/> {isLoading ? 'Menyimpan...' : (editId ? 'UPDATE PRODUK' : 'SIMPAN PRODUK')}
             </button>
           </div>
         </div>

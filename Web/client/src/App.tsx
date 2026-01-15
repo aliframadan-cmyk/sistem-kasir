@@ -38,7 +38,7 @@ const App = () => {
   const [activeTab, setActiveTab] = useState<'pos' | 'inventory' | 'history'>('pos');
   const [search, setSearch] = useState("");
   const [keranjang, setKeranjang] = useState<ItemKeranjang[]>([]);
-  const [riwayat, setRiwayat] = useState<HistoryTransaksi[]>([]);
+  const [riwayat, setRiwayat] = useState<HistoryTransaksi[]>([]); // State Riwayat
   const [produkList, setProdukList] = useState<Produk[]>([]);
   
   // Modal & Loading
@@ -66,8 +66,21 @@ const App = () => {
     } catch (error) { console.error("Error fetching", error); }
   };
 
+  // --- USE EFFECT (Load Data saat Login) ---
   useEffect(() => {
-    if (isLoggedIn) fetchProducts();
+    if (isLoggedIn) {
+      fetchProducts();
+      
+      // --- PERBAIKAN 1: MEMUAT RIWAYAT DARI LOCAL STORAGE ---
+      const savedHistory = localStorage.getItem('riwayat_transaksi');
+      if (savedHistory) {
+        try {
+          setRiwayat(JSON.parse(savedHistory));
+        } catch (e) {
+          console.error("Gagal memuat riwayat", e);
+        }
+      }
+    }
   }, [isLoggedIn]);
 
   // Login
@@ -140,11 +153,14 @@ const App = () => {
           total: totalBelanja 
         };
         
-        setRiwayat([trx, ...riwayat]); 
-        setLastTrx(trx); // Simpan state untuk dicetak
+        // --- PERBAIKAN 2: SIMPAN RIWAYAT KE LOCAL STORAGE ---
+        const updatedRiwayat = [trx, ...riwayat];
+        setRiwayat(updatedRiwayat); 
+        localStorage.setItem('riwayat_transaksi', JSON.stringify(updatedRiwayat)); // Simpan Permanen
+
+        setLastTrx(trx); 
         
-        // --- Perbaikan Timing State ---
-        // Kita beri jeda sedikit agar React selesai merender 'lastTrx' ke DOM sebelum window.print() dipanggil
+        // Jeda sedikit untuk render struk
         setTimeout(() => {
             setShowSuccess(true);
         }, 100);
@@ -155,7 +171,7 @@ const App = () => {
     } catch (e) { alert("Error Transaksi"); } finally { setIsLoading(false); }
   };
 
-  // Fungsi Cetak (Window Print)
+  // Fungsi Cetak
   const handlePrint = () => {
     window.print();
   };
@@ -182,35 +198,21 @@ const App = () => {
   return (
     <div className="flex h-screen bg-[#F8FAFC] font-sans overflow-hidden">
       
-      {/* --- BAGIAN PENTING: CSS PRINT FIXED --- */}
+      {/* CSS PRINT FIXED */}
       <style>{`
         @media print {
-          /* Sembunyikan semua elemen body */
           body * { visibility: hidden; }
-          
-          /* Munculkan hanya struk */
-          #struk-print, #struk-print * { 
-            visibility: visible; 
-          }
-          
+          #struk-print, #struk-print * { visibility: visible; }
           #struk-print { 
-            display: block !important; /* <--- INI KUNCI AGAR TIDAK KOSONG */
-            position: absolute; 
-            left: 0; 
-            top: 0; 
-            width: 100%; 
-            margin: 0;
-            padding: 10px;
-            background: white;
-            color: black;
+            display: block !important;
+            position: absolute; left: 0; top: 0; width: 100%; 
+            margin: 0; padding: 10px; background: white; color: black;
           }
-
-          /* Hilangkan margin browser default */
           @page { margin: 0; size: auto; }
         }
       `}</style>
 
-      {/* STRUK (Default Hidden, muncul saat @media print) */}
+      {/* STRUK */}
       <div id="struk-print" className="hidden font-mono text-sm max-w-[80mm] mx-auto bg-white">
         {lastTrx ? (
           <div className="text-center pb-8 pt-4">
@@ -241,9 +243,7 @@ const App = () => {
             <p className="text-xs">Terima Kasih & Selamat Belanja Kembali</p>
             <p className="text-[10px] mt-1 text-slate-500">Barang yang dibeli tidak dapat ditukar</p>
           </div>
-        ) : (
-            <p className="text-center py-10">Data Struk Belum Siap...</p>
-        )}
+        ) : (<p className="text-center py-10">Data Struk Belum Siap...</p>)}
       </div>
 
       {/* SIDEBAR */}
@@ -359,7 +359,7 @@ const App = () => {
         )}
       </div>
 
-      {/* MODAL TRANSAKSI BERHASIL (ADA TOMBOL CETAK) */}
+      {/* MODAL TRANSAKSI BERHASIL */}
       {showSuccess && (
         <div className="fixed inset-0 bg-blue-900/40 backdrop-blur-md flex items-center justify-center z-[100]">
           <div className="bg-white p-10 rounded-[3rem] text-center shadow-2xl w-full max-w-sm">

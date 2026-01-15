@@ -1,12 +1,26 @@
 const express = require('express');
-const cors = require('cors');
+const cors = require('cors'); // <--- 1. IMPORT CORS DISINI
 const { PrismaClient } = require('@prisma/client');
 
 const app = express();
 const prisma = new PrismaClient();
+
+// --- AUTO-CREATE ADMIN USER ---
+async function initAdmin() {
+  const adminExists = await prisma.user.findUnique({ where: { username: 'admin' } });
+  if (!adminExists) {
+    await prisma.user.create({
+      data: { username: 'admin', password: '123' }
+    });
+    console.log("User 'admin' berhasil dibuat (Password: 123)");
+  }
+}
+initAdmin();
+
 const PORT = 3000;
 
-app.use(cors());
+// --- MIDDLEWARE ---
+app.use(cors()); // <--- 2. PASANG CORS DISINI (Sebelum Route Apapun)
 app.use(express.json());
 
 // --- ROUTES API ---
@@ -14,7 +28,22 @@ app.get('/', (req, res) => {
   res.send('Halo! Server Kasir Sembako sudah berjalan siap digunakan.');
 });
 
-// 1. GET SEMUA PRODUK
+// 1. API LOGIN (YANG TADI HILANG)
+app.post('/api/login', async (req, res) => {
+  const { username, password } = req.body;
+  try {
+    const user = await prisma.user.findUnique({ where: { username } });
+    if (user && user.password === password) {
+      res.json({ success: true, user: { id: user.id, username: user.username } });
+    } else {
+      res.status(401).json({ success: false, message: "Username atau Password salah!" });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Error server" });
+  }
+});
+
+// 2. GET SEMUA PRODUK
 app.get('/api/products', async (req, res) => {
   try {
     const products = await prisma.product.findMany({
@@ -26,13 +55,12 @@ app.get('/api/products', async (req, res) => {
   }
 });
 
-// 2. CHECKOUT (LOGIKA KASIR GROSIR)
+// 3. CHECKOUT
 app.post('/api/checkout', async (req, res) => {
   const { customerType, items, total } = req.body; 
-
   try {
     const result = await prisma.$transaction(async (tx) => {
-      // A. Buat Data Transaksi (Invoice)
+      // A. Buat Invoice
       const transaction = await tx.transaction.create({
         data: {
           invoiceNo: `INV-${Date.now()}`,
@@ -40,7 +68,6 @@ app.post('/api/checkout', async (req, res) => {
           customerType: customerType,
           items: {
             create: items.map(item => ({
-              // Handle id dari frontend (bisa id atau productId)
               productId: item.id || item.productId,
               productName: item.name,
               unit: item.unit,
@@ -52,7 +79,7 @@ app.post('/api/checkout', async (req, res) => {
         }
       });
 
-      // B. Kurangi Stok Barang
+      // B. Kurangi Stok
       for (const item of items) {
         const prodId = item.id || item.productId;
         const product = await tx.product.findUnique({ where: { id: prodId } });
@@ -60,27 +87,21 @@ app.post('/api/checkout', async (req, res) => {
         if (!product) throw new Error(`Produk ID ${prodId} tidak ditemukan`);
 
         let deductAmount = item.qty;
-        
-        // JIKA BELI DUS, KURANGI STOK FISIK SEJUMLAH ISI DUS
         if (item.unit === 'Dus') {
             deductAmount = item.qty * product.qtyPerDus; 
         }
 
-        // Cek apakah stok cukup
         if (product.stockPcs < deductAmount) {
-            throw new Error(`Stok ${product.name} kurang! Sisa: ${product.stockPcs}, Butuh: ${deductAmount}`);
+            throw new Error(`Stok ${product.name} kurang!`);
         }
 
-        // Update stok di database
         await tx.product.update({
           where: { id: prodId },
           data: { stockPcs: { decrement: deductAmount } }
         });
       }
-
       return transaction;
     });
-
     res.json({ success: true, data: result });
   } catch (error) {
     console.error(error);
@@ -88,50 +109,41 @@ app.post('/api/checkout', async (req, res) => {
   }
 });
 
-// 3. API Tambah Produk Baru
+// 4. API Tambah Produk
 app.post('/api/products', async (req, res) => {
   const { name, category, stockPcs, pricePcs, priceDus, barcode } = req.body;
-
   try {
     const newProduct = await prisma.product.create({
       data: {
         name,
         category,
-        stockPcs: parseInt(stockPcs), // Pastikan jadi angka
+        stockPcs: parseInt(stockPcs),
         pricePcs: parseInt(pricePcs),
-        priceDus: parseInt(priceDus) || 0, // Opsional
-        barcode: barcode || null,          // Opsional
+        priceDus: parseInt(priceDus) || 0,
+        barcode: barcode || null,
       }
     });
     res.json({ success: true, data: newProduct });
   } catch (error) {
-    console.error(error);
     res.status(500).json({ success: false, message: "Gagal menyimpan barang." });
   }
 });
 
-// 4. API Hapus Produk
+// 5. API Hapus Produk
 app.delete('/api/products/:id', async (req, res) => {
   const { id } = req.params;
-
   try {
-    await prisma.product.delete({
-      where: {
-        id: parseInt(id), // Ubah ID dari string ke angka
-      },
-    });
+    await prisma.product.delete({ where: { id: parseInt(id) } });
     res.json({ success: true, message: "Produk berhasil dihapus" });
   } catch (error) {
-    console.error("Gagal menghapus:", error);
-    res.status(500).json({ success: false, message: "Gagal menghapus produk (Mungkin produk ini ada di riwayat transaksi)" });
+    res.status(500).json({ success: false, message: "Gagal menghapus produk" });
   }
 });
 
-// 5. API Update Produk
+// 6. API Update Produk
 app.put('/api/products/:id', async (req, res) => {
   const { id } = req.params;
   const { name, category, stockPcs, pricePcs, priceDus, barcode } = req.body;
-
   try {
     const updatedProduct = await prisma.product.update({
       where: { id: parseInt(id) },
@@ -146,12 +158,10 @@ app.put('/api/products/:id', async (req, res) => {
     });
     res.json({ success: true, data: updatedProduct });
   } catch (error) {
-    console.error("Gagal update:", error);
     res.status(500).json({ success: false, message: "Gagal mengupdate produk." });
   }
 });
 
-// JALANKAN SERVER
 app.listen(PORT, () => {
   console.log(`✅ Server berjalan di http://localhost:${PORT}`);
 });

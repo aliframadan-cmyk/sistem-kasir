@@ -10,7 +10,9 @@ app.use(cors());
 app.use(express.json());
 
 // --- ROUTES API ---
-
+app.get('/', (req, res) => {
+  res.send('Halo! Server Kasir Sembako sudah berjalan siap digunakan.');
+});
 // 1. GET SEMUA PRODUK
 app.get('/api/products', async (req, res) => {
   try {

@@ -37,7 +37,7 @@ const App = () => {
   // Popups State
   const [showEmptyWarning, setShowEmptyWarning] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [showAddModal, setShowAddModal] = useState(false); // Popup Tambah Barang
+  const [showAddModal, setShowAddModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   // Form Input Produk Baru
@@ -70,7 +70,7 @@ const App = () => {
 
   useEffect(() => { fetchProducts(); }, []);
 
-  // --- FUNGSI 2: TAMBAH BARANG BARU ---
+  // --- FUNGSI 2: TAMBAH BARANG ---
   const handleSimpanProduk = async () => {
     if (!newItem.name || !newItem.pricePcs) return alert("Nama dan Harga Ecer wajib diisi!");
     
@@ -86,8 +86,8 @@ const App = () => {
       if (result.success) {
         alert("Produk Berhasil Ditambahkan!");
         setShowAddModal(false);
-        setNewItem({ name: "", category: "Sembako", stockPcs: "", pricePcs: "", priceDus: "", barcode: "" }); // Reset form
-        fetchProducts(); // Refresh data
+        setNewItem({ name: "", category: "Sembako", stockPcs: "", pricePcs: "", priceDus: "", barcode: "" });
+        fetchProducts();
       } else {
         alert("Gagal: " + result.message);
       }
@@ -95,6 +95,27 @@ const App = () => {
       alert("Terjadi kesalahan koneksi");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  // --- FUNGSI 3: HAPUS BARANG (BARU) ---
+  const handleHapusProduk = async (id: number, nama: string) => {
+    if (!confirm(`Apakah Anda yakin ingin menghapus produk "${nama}"? Data yang dihapus tidak bisa dikembalikan.`)) return;
+
+    try {
+      const response = await fetch(`http://localhost:3000/api/products/${id}`, {
+        method: 'DELETE',
+      });
+      const result = await response.json();
+
+      if (result.success) {
+        // Hapus dari tampilan tanpa perlu refresh
+        setProdukList(produkList.filter(p => p.id !== id));
+      } else {
+        alert("Gagal menghapus: " + result.message);
+      }
+    } catch (error) {
+      alert("Gagal menghubungi server.");
     }
   };
 
@@ -128,7 +149,7 @@ const App = () => {
             id: `TRX-${Math.floor(Date.now() / 1000)}`,
             tanggal: new Date().toLocaleString('id-ID'),
             items: [...keranjang],
-            total: keranjang.reduce((acc, item) => acc + item.subtotal, 0)
+            total: keranjang.reduce((acc, i) => acc + i.subtotal, 0)
         };
         setRiwayat([transaksiBaru, ...riwayat]);
         await fetchProducts();
@@ -169,7 +190,6 @@ const App = () => {
               {activeTab === 'pos' ? 'Kasir Sembako' : activeTab === 'inventory' ? 'Stok Barang' : 'Riwayat Penjualan'}
             </h1>
             
-            {/* SEARCH BAR */}
             <div className="relative w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18}/>
               <input type="text" placeholder="Cari..." className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl outline-none focus:border-blue-500" onChange={(e) => setSearch(e.target.value)}/>
@@ -192,7 +212,7 @@ const App = () => {
             </div>
           )}
 
-          {/* INVENTORY VIEW (DENGAN TOMBOL TAMBAH) */}
+          {/* INVENTORY VIEW (DENGAN DELETE) */}
           {activeTab === 'inventory' && (
             <div>
               <div className="flex justify-end mb-4">
@@ -203,14 +223,28 @@ const App = () => {
               <div className="bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm">
                 <table className="w-full text-left">
                   <thead className="bg-slate-50 text-slate-400 text-[11px] uppercase font-bold tracking-widest">
-                    <tr><th className="px-8 py-5">Barang</th><th className="px-8 py-5 text-center">Tersedia</th><th className="px-8 py-5 text-right">Harga</th></tr>
+                    <tr>
+                      <th className="px-8 py-5">Barang</th>
+                      <th className="px-8 py-5 text-center">Tersedia</th>
+                      <th className="px-8 py-5 text-right">Harga</th>
+                      <th className="px-8 py-5 text-center">Aksi</th>
+                    </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
                     {produkList.map(p => (
-                      <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                      <tr key={p.id} className="hover:bg-slate-50 transition-colors group">
                         <td className="px-8 py-5 font-bold text-slate-700">{p.nama} <span className="text-xs text-slate-400 font-normal ml-2">{p.kategori}</span></td>
                         <td className="px-8 py-5 text-center font-bold text-blue-600">{p.stok}</td>
                         <td className="px-8 py-5 text-right font-black">Rp {p.hargaEcer.toLocaleString('id-ID')}</td>
+                        <td className="px-8 py-5 text-center">
+                          <button 
+                            onClick={() => handleHapusProduk(p.id, p.nama)} 
+                            className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-all shadow-sm"
+                            title="Hapus Produk"
+                          >
+                            <Trash2 size={18}/>
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -277,7 +311,7 @@ const App = () => {
         )}
       </div>
 
-      {/* --- MODAL TAMBAH BARANG (BARU) --- */}
+      {/* --- MODAL TAMBAH BARANG --- */}
       {showAddModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
           <div className="bg-white w-full max-w-lg rounded-[2rem] p-8 shadow-2xl overflow-hidden">
@@ -339,7 +373,7 @@ const App = () => {
         </div>
       )}
 
-      {/* --- POPUP LAINNYA --- */}
+      {/* --- POPUPS LAINNYA --- */}
       {showEmptyWarning && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[100] p-4">
           <div className="bg-white w-full max-w-sm rounded-[3rem] p-10 shadow-2xl text-center">

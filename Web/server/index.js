@@ -110,6 +110,23 @@ app.post('/api/products', async (req, res) => {
   }
 });
 
+// 4. API Hapus Produk
+app.delete('/api/products/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    await prisma.product.delete({
+      where: {
+        id: parseInt(id), // Ubah ID dari string ke angka
+      },
+    });
+    res.json({ success: true, message: "Produk berhasil dihapus" });
+  } catch (error) {
+    console.error("Gagal menghapus:", error);
+    res.status(500).json({ success: false, message: "Gagal menghapus produk (Mungkin produk ini ada di riwayat transaksi)" });
+  }
+});
+
 // JALANKAN SERVER
 app.listen(PORT, () => {
   console.log(`✅ Server berjalan di http://localhost:${PORT}`);

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   LayoutGrid, ShoppingCart, Package, History, Search, LayoutDashboard,
-  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, Percent
+  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, Percent, UserCircle, Lock
 } from 'lucide-react';
 
 // --- DATA AWAL (DUMMY) ---
@@ -12,6 +12,12 @@ const DATA_PRODUK_AWAL = [
   { id: 4, nama: "Telur Ayam 1kg", kategori: "Sembako", stok: 8, hargaEcer: 28000, barcode: "8991004" },
   { id: 5, nama: "Indomie Goreng", kategori: "Makanan", stok: 100, hargaEcer: 3500, barcode: "8991005" },
   { id: 6, nama: "Kopi Sachet", kategori: "Minuman", stok: 45, hargaEcer: 1500, barcode: "8991006" },
+];
+
+// --- DATA USER (HARDCODED) ---
+const DATA_USERS = [
+  { username: 'admin', password: '123', role: 'admin', nama: 'Boss Admin' },
+  { username: 'kasir', password: '123', role: 'kasir', nama: 'Kasir Jaga' },
 ];
 
 // --- Interfaces ---
@@ -31,6 +37,7 @@ interface ItemKeranjang extends Produk {
 
 interface HistoryTransaksi {
   id: string;
+  kasir: string; // Tambahan: mencatat siapa yg melayani
   tanggal: string;
   waktu: string;
   items: ItemKeranjang[];
@@ -39,9 +46,23 @@ interface HistoryTransaksi {
   total: number;
 }
 
+interface UserSession {
+  username: string;
+  role: 'admin' | 'kasir';
+  nama: string;
+}
+
 const App = () => {
-  // --- STATE ---
-  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem('kasir_user'));
+  // --- STATE USER & LOGIN ---
+  const [currentUser, setCurrentUser] = useState<UserSession | null>(() => {
+    const saved = localStorage.getItem('kasir_session');
+    return saved ? JSON.parse(saved) : null;
+  });
+  
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' });
+  const [loginError, setLoginError] = useState('');
+
+  // --- STATE APLIKASI ---
   const [activeTab, setActiveTab] = useState<'dashboard' | 'pos' | 'inventory' | 'history'>('dashboard');
   
   // Data Utama
@@ -57,20 +78,18 @@ const App = () => {
 
   // State Transaksi
   const [keranjang, setKeranjang] = useState<ItemKeranjang[]>([]);
-  const [diskon, setDiskon] = useState<number>(0); // State Diskon
+  const [diskon, setDiskon] = useState<number>(0); 
   const [search, setSearch] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
   
-  // UI States (Popups)
+  // UI States
   const [showEmptyWarning, setShowEmptyWarning] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false); 
   const [showSaveSuccess, setShowSaveSuccess] = useState(false); 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
-  
   const [showAddModal, setShowAddModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-
   const [editId, setEditId] = useState<number | null>(null);
   const [lastTrx, setLastTrx] = useState<HistoryTransaksi | null>(null);
   
@@ -82,31 +101,51 @@ const App = () => {
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
   // --- CALCULATIONS ---
-  // Menghitung Subtotal Kotor
   const subtotalKotor = useMemo(() => keranjang.reduce((a, b) => a + b.subtotal, 0), [keranjang]);
-  // Menghitung Total Bersih (Setelah Diskon)
   const totalBayarAkhir = Math.max(0, subtotalKotor - diskon);
 
   // --- EFFECT ---
-  useEffect(() => {
-    localStorage.setItem('db_produk', JSON.stringify(produkList));
-  }, [produkList]);
-
-  useEffect(() => {
-    localStorage.setItem('db_riwayat', JSON.stringify(riwayat));
-  }, [riwayat]);
-
-  useEffect(() => {
-    if (activeTab === 'pos' && barcodeInputRef.current) barcodeInputRef.current.focus();
+  useEffect(() => { localStorage.setItem('db_produk', JSON.stringify(produkList)); }, [produkList]);
+  useEffect(() => { localStorage.setItem('db_riwayat', JSON.stringify(riwayat)); }, [riwayat]);
+  useEffect(() => { 
+    if (activeTab === 'pos' && barcodeInputRef.current) barcodeInputRef.current.focus(); 
   }, [activeTab]);
 
+  // Efek Login Session
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('kasir_session', JSON.stringify(currentUser));
+      // Jika kasir login, paksa pindah ke POS, jangan dashboard
+      if (currentUser.role === 'kasir') setActiveTab('pos');
+    } else {
+      localStorage.removeItem('kasir_session');
+    }
+  }, [currentUser]);
 
-  // --- LOGIKA POS (KASIR) ---
+  // --- LOGIKA LOGIN ---
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    const user = DATA_USERS.find(u => u.username === loginForm.username && u.password === loginForm.password);
+    if (user) {
+      setCurrentUser({ username: user.username, role: user.role as 'admin'|'kasir', nama: user.nama });
+      setLoginError('');
+      setLoginForm({ username: '', password: '' });
+    } else {
+      setLoginError('Username atau Password Salah!');
+    }
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setKeranjang([]); // Reset keranjang saat logout
+    setDiskon(0);
+  };
+
+  // --- LOGIKA POS ---
   const tambahKeKeranjang = (produk: Produk) => {
     if (produk.stok <= 0) return alert("Stok Habis!");
     const itemDiKeranjang = keranjang.find(k => k.id === produk.id);
     const currentQty = itemDiKeranjang ? itemDiKeranjang.qty : 0;
-    
     if (currentQty + 1 > produk.stok) return alert("Stok tidak mencukupi!");
 
     if (itemDiKeranjang) {
@@ -132,6 +171,7 @@ const App = () => {
         const now = new Date();
         const trx: HistoryTransaksi = { 
             id: `INV-${Date.now()}`, 
+            kasir: currentUser?.nama || 'Unknown', // Catat nama kasir
             tanggal: now.toLocaleDateString('id-ID'), 
             waktu: now.toLocaleTimeString('id-ID'),
             items: [...keranjang],
@@ -148,20 +188,18 @@ const App = () => {
 
         setLastTrx(trx);
         setKeranjang([]);
-        setDiskon(0); // Reset Diskon
+        setDiskon(0); 
         setIsLoading(false);
         setShowSuccess(true);
     }, 800);
   };
 
-
-  // --- LOGIKA INVENTORY & DELETE ---
+  // --- LOGIKA INVENTORY ---
   const handleSimpanProduk = () => {
     if (!newItem.name || !newItem.pricePcs) return alert("Nama dan Harga Wajib diisi!");
     const productData = {
         nama: newItem.name, kategori: newItem.category, stok: parseInt(newItem.stockPcs) || 0, hargaEcer: parseInt(newItem.pricePcs) || 0, barcode: newItem.barcode
     };
-
     if (editId) { setProdukList(produkList.map(p => p.id === editId ? { ...p, ...productData } : p)); } 
     else { const newId = produkList.length > 0 ? Math.max(...produkList.map(p => p.id)) + 1 : 1; setProdukList([...produkList, { id: newId, ...productData }]); }
     setShowAddModal(false); setShowSaveSuccess(true);
@@ -170,7 +208,6 @@ const App = () => {
   const clickHapusButton = (id: number) => { setDeleteTargetId(id); setShowDeleteConfirm(true); };
   const executeDelete = () => { if (deleteTargetId !== null) { setProdukList(produkList.filter(p => p.id !== deleteTargetId)); setShowDeleteConfirm(false); setDeleteTargetId(null); } };
   const hapusSemuaRiwayat = () => { if(confirm("Hapus SEMUA riwayat transaksi?")) { setRiwayat([]); } };
-
 
   // --- LOGIKA DASHBOARD ---
   const stats = useMemo(() => {
@@ -190,8 +227,55 @@ const App = () => {
   }, [riwayat, produkList]);
 
 
-  if (!isLoggedIn) return <div className="flex h-screen items-center justify-center bg-slate-900 text-white cursor-pointer font-bold text-xl" onClick={() => {localStorage.setItem('kasir_user','true'); setIsLoggedIn(true);}}>Klik Disini untuk Masuk Aplikasi Kasir</div>;
+  // --- HALAMAN LOGIN ---
+  if (!currentUser) return (
+    <div className="flex h-screen items-center justify-center bg-slate-900 text-slate-200 font-sans p-4">
+      <div className="bg-white text-slate-800 p-8 rounded-3xl shadow-2xl w-full max-w-sm animate-pop-in">
+        <div className="text-center mb-8">
+            <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 text-white shadow-lg shadow-blue-500/50">
+                <UserCircle size={40}/>
+            </div>
+            <h1 className="text-2xl font-black text-slate-800">Login Sistem</h1>
+            <p className="text-sm text-slate-400">Silakan masuk untuk melanjutkan</p>
+        </div>
+        
+        <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+                <label className="text-xs font-bold text-slate-500 uppercase ml-1">Username</label>
+                <input 
+                    type="text" 
+                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500 focus:ring-2 ring-blue-100 transition-all"
+                    placeholder="Contoh: admin"
+                    value={loginForm.username}
+                    onChange={e => setLoginForm({...loginForm, username: e.target.value})}
+                />
+            </div>
+            <div>
+                <label className="text-xs font-bold text-slate-500 uppercase ml-1">Password</label>
+                <input 
+                    type="password" 
+                    className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500 focus:ring-2 ring-blue-100 transition-all"
+                    placeholder="••••••"
+                    value={loginForm.password}
+                    onChange={e => setLoginForm({...loginForm, password: e.target.value})}
+                />
+            </div>
+            
+            {loginError && <p className="text-red-500 text-xs font-bold text-center bg-red-50 py-2 rounded-lg">{loginError}</p>}
+            
+            <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-black shadow-lg shadow-blue-200 transition-all active:scale-95">
+                MASUK <ArrowRight className="inline ml-1" size={18}/>
+            </button>
+        </form>
+        <div className="mt-6 text-center text-[10px] text-slate-400">
+            <p>Default Admin: admin / 123</p>
+            <p>Default Kasir: kasir / 123</p>
+        </div>
+      </div>
+    </div>
+  );
 
+  // --- HALAMAN UTAMA ---
   return (
     <div className="flex h-screen bg-[#F8FAFC] font-sans overflow-hidden">
       <style>{`
@@ -206,6 +290,7 @@ const App = () => {
             <h2 className="font-bold">TOKO MAJU JAYA</h2>
             <p className="text-xs">{lastTrx.tanggal} {lastTrx.waktu}</p>
             <p className="text-xs">No: {lastTrx.id}</p>
+            <p className="text-xs">Kasir: {lastTrx.kasir}</p>
             <hr className="border-dashed border-black my-2"/>
             <div className="text-left">{lastTrx.items.map(i => (<div key={i.id} className="flex justify-between"><span>{i.nama} <span className="text-[10px]"><br/>{i.qty} x {i.hargaEcer.toLocaleString()}</span></span><span>{i.subtotal.toLocaleString()}</span></div>))}</div>
             <hr className="border-dashed border-black my-2"/>
@@ -219,18 +304,34 @@ const App = () => {
       {/* SIDEBAR */}
       <aside className="w-24 bg-[#0F172A] flex flex-col items-center py-6 gap-4 z-20 no-print shadow-2xl">
         <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg shadow-blue-900/50"><Package size={32} /></div>
+        
         <nav className="flex flex-col gap-4 flex-1 w-full px-3">
-            {['dashboard', 'pos', 'inventory', 'history'].map((tab) => (
-                <button key={tab} onClick={() => setActiveTab(tab as any)} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all duration-300 ${activeTab === tab ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-                    {tab === 'dashboard' && <LayoutDashboard size={24}/>}
-                    {tab === 'pos' && <ShoppingCart size={24}/>}
-                    {tab === 'inventory' && <LayoutGrid size={24}/>}
-                    {tab === 'history' && <History size={24}/>}
-                    <span className="text-[10px] font-bold capitalize">{tab === 'pos' ? 'Kasir' : tab === 'inventory' ? 'Stok' : tab === 'history' ? 'Riwayat' : 'Dash'}</span>
+            {/* MENU DASHBOARD (Hanya Admin) */}
+            {currentUser.role === 'admin' && (
+                <button onClick={() => setActiveTab('dashboard')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all duration-300 ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                    <LayoutDashboard size={24}/> <span className="text-[10px] font-bold">Dash</span>
                 </button>
-            ))}
+            )}
+
+            {/* MENU KASIR (Semua Bisa) */}
+            <button onClick={() => setActiveTab('pos')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all duration-300 ${activeTab === 'pos' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                <ShoppingCart size={24}/> <span className="text-[10px] font-bold">Kasir</span>
+            </button>
+
+            {/* MENU STOK (Hanya Admin) */}
+            {currentUser.role === 'admin' && (
+                <button onClick={() => setActiveTab('inventory')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all duration-300 ${activeTab === 'inventory' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                    <LayoutGrid size={24}/> <span className="text-[10px] font-bold">Stok</span>
+                </button>
+            )}
+
+            {/* MENU RIWAYAT (Semua Bisa - Kasir cuma lihat) */}
+            <button onClick={() => setActiveTab('history')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all duration-300 ${activeTab === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                <History size={24}/> <span className="text-[10px] font-bold">Riwayat</span>
+            </button>
         </nav>
-        <button onClick={() => {localStorage.removeItem('kasir_user'); setIsLoggedIn(false);}} className="p-3 text-red-400 hover:bg-red-500/10 rounded-xl mb-4"><LogOut size={24}/></button>
+        
+        <button onClick={handleLogout} className="p-3 text-red-400 hover:bg-red-500/10 rounded-xl mb-4" title="Keluar"><LogOut size={24}/></button>
       </aside>
 
       {/* MAIN CONTENT */}
@@ -239,8 +340,11 @@ const App = () => {
           {/* HEADER */}
           <div className="flex justify-between items-center mb-8">
             <div>
-                <h1 className="text-3xl font-black text-slate-800 tracking-tight">{activeTab === 'dashboard' ? 'Dashboard' : activeTab === 'pos' ? 'Kasir' : activeTab === 'inventory' ? 'Stok Barang' : 'Riwayat'}</h1>
-                <p className="text-slate-400 text-sm font-medium mt-1">{new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                <h1 className="text-3xl font-black text-slate-800 tracking-tight capitalize">{activeTab === 'dashboard' ? 'Dashboard' : activeTab === 'pos' ? 'Kasir' : activeTab === 'inventory' ? 'Stok Barang' : 'Riwayat'}</h1>
+                <div className="flex items-center gap-2 mt-1">
+                    <span className={`text-[10px] px-2 py-0.5 rounded uppercase font-bold ${currentUser.role === 'admin' ? 'bg-purple-100 text-purple-600' : 'bg-green-100 text-green-600'}`}>{currentUser.role}</span>
+                    <p className="text-slate-400 text-sm font-medium">Halo, {currentUser.nama}</p>
+                </div>
             </div>
             <div className="flex gap-4">
               {activeTab === 'pos' && (
@@ -252,8 +356,8 @@ const App = () => {
             </div>
           </div>
 
-          {/* DASHBOARD TAB */}
-          {activeTab === 'dashboard' && (
+          {/* DASHBOARD TAB (ADMIN ONLY) */}
+          {activeTab === 'dashboard' && currentUser.role === 'admin' && (
             <div className="space-y-6 max-w-7xl mx-auto pb-10">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="relative overflow-hidden bg-gradient-to-br from-blue-600 to-indigo-700 p-8 rounded-[2rem] text-white shadow-2xl shadow-blue-200">
@@ -277,7 +381,7 @@ const App = () => {
             </div>
           )}
 
-          {/* POS TAB */}
+          {/* POS TAB (SEMUA USER) */}
           {activeTab === 'pos' && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-20">
               {produkList.filter(p => p.nama.toLowerCase().includes(search.toLowerCase())).map(p => (
@@ -290,8 +394,8 @@ const App = () => {
             </div>
           )}
 
-          {/* INVENTORY TAB */}
-          {activeTab === 'inventory' && (
+          {/* INVENTORY TAB (ADMIN ONLY) */}
+          {activeTab === 'inventory' && currentUser.role === 'admin' && (
             <div>
               <div className="flex justify-end mb-6"><button onClick={() => { setEditId(null); setNewItem({name:"",category:"Sembako",stockPcs:"",pricePcs:"",barcode:""}); setShowAddModal(true); }} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-blue-200 transition-all"><PlusCircle size={20}/> Tambah Produk</button></div>
               <div className="bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm">
@@ -306,8 +410,8 @@ const App = () => {
           {/* HISTORY TAB */}
           {activeTab === 'history' && (
             <div className="space-y-4 max-w-4xl pb-10">
-              {riwayat.length > 0 && <button onClick={hapusSemuaRiwayat} className="mb-4 text-red-500 text-sm font-bold flex items-center gap-2 hover:bg-red-50 px-4 py-2 rounded-lg w-fit"><Eraser size={16}/> Hapus Semua</button>}
-              {riwayat.map(h => (<div key={h.id} className="bg-white p-6 rounded-2xl border border-slate-100 flex justify-between items-center shadow-sm hover:shadow-md transition-all"><div className="flex items-center gap-5"><div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><ReceiptText/></div><div><p className="font-bold text-slate-800 text-lg">{h.id}</p><p className="text-sm text-slate-400 font-medium">{h.tanggal} - {h.waktu}</p><div className="flex gap-2 mt-1"><span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-500">Item: {h.items.length}</span>{h.diskon > 0 && <span className="text-[10px] bg-red-100 px-2 py-0.5 rounded text-red-500">Disc: Rp{h.diskon.toLocaleString()}</span>}</div></div></div><div className="text-right"><p className="font-black text-blue-600 text-xl">Rp {h.total.toLocaleString('id-ID')}</p><button onClick={() => { setLastTrx(h); setTimeout(() => window.print(), 100); }} className="text-xs font-bold text-slate-400 hover:text-blue-600 flex items-center gap-1 justify-end mt-2"><Printer size={14}/> CETAK NOTA</button></div></div>))}
+              {currentUser.role === 'admin' && riwayat.length > 0 && <button onClick={hapusSemuaRiwayat} className="mb-4 text-red-500 text-sm font-bold flex items-center gap-2 hover:bg-red-50 px-4 py-2 rounded-lg w-fit"><Eraser size={16}/> Hapus Semua</button>}
+              {riwayat.map(h => (<div key={h.id} className="bg-white p-6 rounded-2xl border border-slate-100 flex justify-between items-center shadow-sm hover:shadow-md transition-all"><div className="flex items-center gap-5"><div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><ReceiptText/></div><div><p className="font-bold text-slate-800 text-lg">{h.id}</p><p className="text-sm text-slate-400 font-medium">{h.tanggal} - {h.waktu} <span className="ml-2 text-slate-300">|</span> <span className="ml-2 text-blue-500 font-bold">{h.kasir}</span></p><div className="flex gap-2 mt-1"><span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-500">Item: {h.items.length}</span>{h.diskon > 0 && <span className="text-[10px] bg-red-100 px-2 py-0.5 rounded text-red-500">Disc: Rp{h.diskon.toLocaleString()}</span>}</div></div></div><div className="text-right"><p className="font-black text-blue-600 text-xl">Rp {h.total.toLocaleString('id-ID')}</p><button onClick={() => { setLastTrx(h); setTimeout(() => window.print(), 100); }} className="text-xs font-bold text-slate-400 hover:text-blue-600 flex items-center gap-1 justify-end mt-2"><Printer size={14}/> CETAK NOTA</button></div></div>))}
             </div>
           )}
         </main>
@@ -317,20 +421,17 @@ const App = () => {
           <aside className="w-[400px] bg-white border-l border-slate-100 p-8 flex flex-col shadow-2xl z-30">
             <h2 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-3"><ShoppingCart className="text-blue-600" size={28}/> Pesanan</h2>
             
-            {/* List Barang */}
             <div className="flex-1 overflow-y-auto space-y-4 pr-2 scrollbar-thin mb-4">
               {keranjang.length === 0 && <div className="text-center text-slate-400 mt-20">Keranjang Kosong.</div>}
               {keranjang.map(item => (<div key={item.id} className="flex justify-between items-start bg-slate-50 p-4 rounded-2xl border border-transparent hover:border-blue-200 transition-all"><div><p className="font-bold text-sm text-slate-700 line-clamp-1">{item.nama}</p><div className="flex items-center gap-2 mt-1"><span className="text-xs font-bold bg-white px-2 py-1 rounded border">{item.qty}x</span><span className="text-xs text-slate-400">@ {item.hargaEcer.toLocaleString()}</span></div></div><div className="text-right"><p className="font-bold text-slate-700 text-sm">Rp {item.subtotal.toLocaleString()}</p><button onClick={() => setKeranjang(keranjang.filter(i => i.id !== item.id))} className="text-red-400 hover:text-red-600 text-[10px] mt-1 font-bold">HAPUS</button></div></div>))}
             </div>
 
-            {/* Bagian Bawah: Diskon & Total */}
             <div className="pt-4 border-t border-dashed border-slate-200 bg-white">
                 <div className="flex justify-between items-center mb-3">
                     <span className="text-slate-400 text-sm font-medium">Subtotal</span>
                     <span className="font-bold text-slate-700">Rp {subtotalKotor.toLocaleString()}</span>
                 </div>
                 
-                {/* --- UPDATE: INPUT DISKON YANG DIPERBAIKI --- */}
                 <div className="bg-slate-50 p-3 rounded-xl mb-6 border border-slate-200 focus-within:border-blue-400 focus-within:ring-2 ring-blue-100 transition-all">
                     <div className="flex items-center gap-2 mb-2">
                         <div className="p-1.5 bg-white rounded-lg text-slate-400 shadow-sm"><Percent size={14}/></div>
@@ -338,51 +439,16 @@ const App = () => {
                     </div>
                     
                     <div className="flex items-center gap-2">
-                        {/* Tombol Kurang */}
-                        <button 
-                            onClick={() => setDiskon(Math.max(0, diskon - 500))}
-                            className="w-10 h-10 bg-white border border-slate-200 rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-500 hover:border-red-200 font-bold text-lg active:scale-90 transition-all"
-                        >
-                            -
-                        </button>
-
-                        {/* Input Angka Fixed */}
-                        <input 
-                            type="number" 
-                            className="flex-1 bg-white border border-slate-200 rounded-lg h-10 px-3 font-bold text-slate-700 text-center outline-none focus:border-blue-500"
-                            placeholder="0"
-                            value={diskon} // Nilai 0 tetap muncul
-                            onFocus={(e) => e.target.select()} // Auto Select saat klik
-                            onChange={(e) => {
-                                const val = parseInt(e.target.value);
-                                setDiskon(isNaN(val) ? 0 : val);
-                            }}
-                        />
-
-                        {/* Tombol Tambah */}
-                        <button 
-                            onClick={() => setDiskon(diskon + 500)}
-                            className="w-10 h-10 bg-white border border-slate-200 rounded-lg text-slate-500 hover:bg-blue-50 hover:text-blue-500 hover:border-blue-200 font-bold text-lg active:scale-90 transition-all"
-                        >
-                            +
-                        </button>
+                        <button onClick={() => setDiskon(Math.max(0, diskon - 500))} className="w-10 h-10 bg-white border border-slate-200 rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-500 hover:border-red-200 font-bold text-lg active:scale-90 transition-all">-</button>
+                        <input type="number" className="flex-1 bg-white border border-slate-200 rounded-lg h-10 px-3 font-bold text-slate-700 text-center outline-none focus:border-blue-500" placeholder="0" value={diskon} onFocus={(e) => e.target.select()} onChange={(e) => { const val = parseInt(e.target.value); setDiskon(isNaN(val) ? 0 : val); }} />
+                        <button onClick={() => setDiskon(diskon + 500)} className="w-10 h-10 bg-white border border-slate-200 rounded-lg text-slate-500 hover:bg-blue-50 hover:text-blue-500 hover:border-blue-200 font-bold text-lg active:scale-90 transition-all">+</button>
                     </div>
                     
-                    {/* Shortcut Cepat */}
                     <div className="flex gap-2 mt-2 justify-center">
-                        {[1000, 2000, 5000].map(val => (
-                            <button 
-                                key={val}
-                                onClick={() => setDiskon(val)}
-                                className="text-[10px] bg-slate-200 hover:bg-slate-300 text-slate-600 px-2 py-1 rounded font-bold transition-colors"
-                            >
-                                {val/1000}k
-                            </button>
-                        ))}
+                        {[1000, 2000, 5000].map(val => ( <button key={val} onClick={() => setDiskon(val)} className="text-[10px] bg-slate-200 hover:bg-slate-300 text-slate-600 px-2 py-1 rounded font-bold transition-colors">{val/1000}k</button> ))}
                          <button onClick={() => setDiskon(0)} className="text-[10px] bg-red-100 hover:bg-red-200 text-red-500 px-2 py-1 rounded font-bold transition-colors">Reset</button>
                     </div>
                 </div>
-                {/* --- END UPDATE --- */}
 
                 <div className="flex justify-between items-end mb-6">
                     <span className="font-bold text-slate-800 text-lg">TOTAL</span>

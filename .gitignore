@@ -1,0 +1,24 @@
+# Dependency folders (Client & Server)
+node_modules/
+**/node_modules/
+
+# Build and Cache
+dist/
+dist-ssr/
+.vite/
+**/.vite/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment and Database
+.env
+*.local
+*.db
+*.db-journal
+
+# Editor files
+.vscode/
+.idea/
+.DS_Store

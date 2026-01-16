@@ -39,8 +39,8 @@ interface HistoryTransaksi {
     diskon: number;
     ppn: number;      
     total: number;
-    bayar: number;     // NEW: Uang yang diterima
-    kembali: number;   // NEW: Kembalian
+    bayar: number;
+    kembali: number;
     metodePembayaran: string; 
 }
 interface UserSession { id: number; username: string; role: 'admin' | 'kasir'; nama: string; }
@@ -94,7 +94,7 @@ const App = () => {
   const [ppnAktif, setPpnAktif] = useState(false);
   const [inputDiskon, setInputDiskon] = useState(""); 
   const [metodePembayaran, setMetodePembayaran] = useState<string>('Cash'); 
-  const [inputBayar, setInputBayar] = useState(""); // NEW: State untuk input uang
+  const [inputBayar, setInputBayar] = useState(""); 
 
   // UI States
   const [showEmptyWarning, setShowEmptyWarning] = useState(false);
@@ -132,7 +132,7 @@ const App = () => {
 
   // --- LOGIKA KEMBALIAN ---
   const nilaiBayar = useMemo(() => {
-    if (metodePembayaran === 'QRIS') return totalAkhir; // Jika QRIS, anggap bayar pas
+    if (metodePembayaran === 'QRIS') return totalAkhir; 
     return parseInt(inputBayar.replace(/\D/g, '')) || 0;
   }, [inputBayar, metodePembayaran, totalAkhir]);
 
@@ -190,7 +190,7 @@ const App = () => {
     setKeranjang([]); 
     setPpnAktif(false); 
     setInputDiskon(""); 
-    setInputBayar(""); // Reset input bayar
+    setInputBayar(""); 
     setMetodePembayaran('Cash');
     setShowPassSuccess(false);
   };
@@ -207,7 +207,12 @@ const App = () => {
         pesan += `${item.qty} x ${item.hargaEcer.toLocaleString()} = ${item.subtotal.toLocaleString()}\n`;
     });
     pesan += `--------------------------------\n`;
-    pesan += `Total: Rp ${trx.total.toLocaleString()}\n`;
+    // TAMBAHAN LOGIKA WA AGAR MUNCUL RINCIAN
+    pesan += `Subtotal: Rp ${trx.subtotal.toLocaleString()}\n`;
+    if(trx.diskon > 0) pesan += `Diskon: -Rp ${trx.diskon.toLocaleString()}\n`;
+    if(trx.ppn > 0) pesan += `PPN 11%: +Rp ${trx.ppn.toLocaleString()}\n`;
+    pesan += `--------------------------------\n`;
+    pesan += `*Total: Rp ${trx.total.toLocaleString()}*\n`;
     pesan += `Bayar: Rp ${trx.bayar.toLocaleString()}\n`;
     pesan += `Kembali: Rp ${trx.kembali.toLocaleString()}\n`;
     pesan += `--------------------------------\n`;
@@ -270,12 +275,15 @@ const App = () => {
         "Kasir": trx.kasir,
         "Metode Bayar": trx.metodePembayaran,
         "Detail Barang": trx.items.map(item => `${item.nama} (${item.qty})`).join(", "),
-        "Total": trx.total,
-        "Bayar": trx.bayar,
-        "Kembali": trx.kembali
+        "Subtotal": trx.subtotal,
+        "Diskon": trx.diskon,
+        "PPN": trx.ppn,
+        "Total Akhir": trx.total,
+        "Uang Bayar": trx.bayar,
+        "Kembalian": trx.kembali
     }));
     const worksheet = XLSX.utils.json_to_sheet(dataUntukExcel);
-    const wscols = [{wch: 20}, {wch: 15}, {wch: 10}, {wch: 15}, {wch: 15}, {wch: 50}, {wch: 15}, {wch: 15}, {wch: 15}];
+    const wscols = [{wch: 20}, {wch: 15}, {wch: 10}, {wch: 15}, {wch: 15}, {wch: 50}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 15}];
     worksheet['!cols'] = wscols;
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Laporan Penjualan");
@@ -342,8 +350,8 @@ const App = () => {
             diskon: nilaiDiskon,
             ppn: nilaiPPN,
             total: totalAkhir,
-            bayar: nilaiBayar,      // SIMPAN NILAI BAYAR
-            kembali: nilaiKembalian, // SIMPAN KEMBALIAN
+            bayar: nilaiBayar,      
+            kembali: nilaiKembalian, 
             metodePembayaran: metodePembayaran 
         };
         setRiwayat(prev => [trx, ...prev]); 
@@ -355,7 +363,7 @@ const App = () => {
         setKeranjang([]);
         setPpnAktif(false); 
         setInputDiskon(""); 
-        setInputBayar(""); // Reset
+        setInputBayar(""); 
         setMetodePembayaran('Cash'); 
         setIsLoading(false);
         setShowSuccess(true);
@@ -430,7 +438,7 @@ const App = () => {
         @media print { body * { visibility: hidden; } #struk-print, #struk-print * { visibility: visible; } #struk-print { display: block !important; position: absolute; left: 0; top: 0; width: 100%; } @page { margin: 0; size: auto; } }
       `}</style>
 
-      {/* STRUK PRINT */}
+      {/* STRUK PRINT (DIPERBAIKI) */}
       <div id="struk-print" className="hidden font-mono text-sm max-w-[80mm] mx-auto bg-white p-4">
         {lastTrx && <div className="text-center">
             <img src={LOGO_URL} alt="Logo" className="w-16 h-16 mx-auto mb-2 object-contain grayscale" />
@@ -440,10 +448,23 @@ const App = () => {
             <p className="text-xs">Kasir: {lastTrx.kasir}</p>
             <p className="text-xs font-bold mt-1">Metode: {lastTrx.metodePembayaran}</p>
             <hr className="border-dashed border-black my-2"/>
+            
             <div className="text-left">{lastTrx.items.map(i => (<div key={i.id} className="flex justify-between"><span>{i.nama} <span className="text-[10px]"><br/>{i.qty} x {i.hargaEcer.toLocaleString()}</span></span><span>{i.subtotal.toLocaleString()}</span></div>))}</div>
+            
             <hr className="border-dashed border-black my-2"/>
-            {/* ITEM TOTAL STRUK */}
-            <div className="flex justify-between font-bold text-lg border-t border-black mt-1 pt-1"><span>TOTAL</span><span>Rp {lastTrx.total.toLocaleString()}</span></div>
+            
+            {/* --- BAGIAN PERBAIKAN: SUBTOTAL, DISKON, PPN --- */}
+            <div className="flex justify-between text-xs mb-1"><span>Subtotal</span><span>Rp {lastTrx.subtotal.toLocaleString()}</span></div>
+            
+            {lastTrx.diskon > 0 && (
+                <div className="flex justify-between text-xs mb-1"><span>Diskon</span><span>- Rp {lastTrx.diskon.toLocaleString()}</span></div>
+            )}
+            
+            {lastTrx.ppn > 0 && (
+                <div className="flex justify-between text-xs mb-1"><span>PPN 11%</span><span>+ Rp {lastTrx.ppn.toLocaleString()}</span></div>
+            )}
+            
+            <div className="flex justify-between font-bold text-lg border-t border-black mt-2 pt-2"><span>TOTAL</span><span>Rp {lastTrx.total.toLocaleString()}</span></div>
             <div className="flex justify-between text-xs mt-2"><span>Bayar</span><span>Rp {lastTrx.bayar.toLocaleString()}</span></div>
             <div className="flex justify-between text-xs font-bold"><span>Kembali</span><span>Rp {lastTrx.kembali.toLocaleString()}</span></div>
             <p className="text-center text-xs mt-4">Terima Kasih</p>

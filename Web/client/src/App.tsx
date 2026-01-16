@@ -7,7 +7,7 @@ import {
 
 // --- KONFIGURASI TOKO (BARU) ---
 // GANTI LINK INI dengan link gambar logomu sendiri nanti.
-const LOGO_URL = "https://cdn-icons-png.flaticon.com/512/3594/3594435.png"; 
+const LOGO_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT_beJfa1EtbhzGt4z7dcWZM2EDGfwtCMZ3Pg&s"; 
 const NAMA_TOKO = "TOKO MAJU JAYA";
 
 // --- DATA AWAL PRODUK ---

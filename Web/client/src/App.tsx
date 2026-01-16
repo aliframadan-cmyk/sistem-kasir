@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { 
   LayoutGrid, ShoppingCart, History, Search, LayoutDashboard,
-  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, UserCircle, KeyRound, Settings, Users, UserPlus, XCircle, UserCheck, AlertTriangle, Minus, Plus, Download, AlertOctagon, MessageCircle, FileText, Tag, CreditCard, Banknote, QrCode, Coins, ChevronDown, BookUser
+  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, UserCircle, KeyRound, Settings, Users, UserPlus, XCircle, UserCheck, AlertTriangle, Minus, Plus, Download, AlertOctagon, MessageCircle, FileText, Tag, CreditCard, Banknote, QrCode, Coins, ChevronDown, BookUser, User
 } from 'lucide-react';
 
 // --- KONFIGURASI TOKO ---
@@ -39,14 +39,12 @@ interface HistoryTransaksi {
     bayar: number;
     kembali: number;
     metodePembayaran: string;
-    catatan?: string; // Menyimpan nama pelanggan jika kasbon
+    catatan?: string; 
 }
 interface UserSession { id: number; username: string; role: 'admin' | 'kasir'; nama: string; }
 interface UserData { id: number; username: string; password: string; role: string; nama: string; }
-
-// Interface Khusus Kasbon
 interface KasbonData {
-    id: string; // ID Transaksi terkait
+    id: string; 
     tanggal: string;
     namaPelanggan: string;
     total: number;
@@ -69,7 +67,8 @@ const App = () => {
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
 
-  // --- STATE USER MANAJEMEN ---
+  // --- STATE MODALS & WARNINGS ---
+  const [showKasbonWarning, setShowKasbonWarning] = useState(false); // <--- POPUP BARU
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [showAddUserSuccess, setShowAddUserSuccess] = useState(false);
   const [showDeleteUserConfirm, setShowDeleteUserConfirm] = useState(false);
@@ -118,7 +117,6 @@ const App = () => {
             catatan: t.catatan || ''
         }));
     } catch (error) {
-        console.error("Data riwayat rusak, reset...", error);
         return []; 
     }
   });
@@ -152,12 +150,10 @@ const App = () => {
 
   // --- CALCULATIONS ---
   const subtotalMurni = useMemo(() => keranjang.reduce((a, b) => a + b.subtotal, 0), [keranjang]);
-  
   const nilaiDiskon = useMemo(() => {
     const val = parseInt(inputDiskon.replace(/\D/g, '')) || 0;
     return val > subtotalMurni ? subtotalMurni : val; 
   }, [inputDiskon, subtotalMurni]);
-
   const subtotalSetelahDiskon = subtotalMurni - nilaiDiskon;
   const nilaiPPN = useMemo(() => (ppnAktif ? Math.round(subtotalSetelahDiskon * 0.11) : 0), [ppnAktif, subtotalSetelahDiskon]);
   const totalAkhir = subtotalSetelahDiskon + nilaiPPN;
@@ -178,18 +174,12 @@ const App = () => {
   useEffect(() => { localStorage.setItem('db_riwayat', JSON.stringify(riwayat)); }, [riwayat]);
   useEffect(() => { localStorage.setItem('db_users', JSON.stringify(dbUsers)); }, [dbUsers]);
   useEffect(() => { localStorage.setItem('db_kasbon', JSON.stringify(kasbonList)); }, [kasbonList]);
-
-  useEffect(() => { 
-    if (activeTab === 'pos' && barcodeInputRef.current) barcodeInputRef.current.focus(); 
-  }, [activeTab]);
-
+  useEffect(() => { if (activeTab === 'pos' && barcodeInputRef.current) barcodeInputRef.current.focus(); }, [activeTab]);
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('kasir_session', JSON.stringify(currentUser));
       if (currentUser.role === 'kasir') setActiveTab('pos');
-    } else {
-      localStorage.removeItem('kasir_session');
-    }
+    } else { localStorage.removeItem('kasir_session'); }
   }, [currentUser]);
 
   // --- LOGIC FUNCTIONS ---
@@ -289,7 +279,13 @@ const App = () => {
   const handleBayarClick = () => {
       if (keranjang.length === 0) return setShowEmptyWarning(true);
       if (metodePembayaran === 'Cash' && isKurangBayar) return alert("Uang kurang!");
-      if (metodePembayaran === 'Kasbon' && !namaPelangganKasbon.trim()) return alert("Nama Pelanggan wajib diisi untuk Kasbon!");
+      
+      // LOGIKA BARU: Jika Kasbon & Nama Kosong, tampilkan POPUP WARNING
+      if (metodePembayaran === 'Kasbon' && !namaPelangganKasbon.trim()) {
+          setShowKasbonWarning(true);
+          return;
+      }
+
       if (metodePembayaran === 'QRIS') setShowQrisModal(true);
       else executeTransaction();
   };
@@ -588,7 +584,7 @@ const App = () => {
                             )}
 
                             {metodePembayaran === 'Kasbon' && (
-                                <div className="bg-white p-3 rounded-xl border-2 border-orange-100 flex items-center gap-2">
+                                <div className="bg-white p-3 rounded-xl border-2 border-orange-100 flex items-center gap-2 animate-bounce-in">
                                     <UserCircle className="text-orange-500" size={20}/>
                                     <input type="text" className="w-full font-bold text-sm outline-none text-slate-800 placeholder:text-slate-300" placeholder="Nama Pelanggan (Wajib)" 
                                         value={namaPelangganKasbon} onChange={(e) => setNamaPelangganKasbon(e.target.value)} />
@@ -820,6 +816,27 @@ const App = () => {
       </main>
 
       {/* --- MODALS --- */}
+
+      {/* POPUP WARNING KASBON NAME (NEW) */}
+      {showKasbonWarning && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+            <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-sm w-full animate-pop-in text-center">
+                <div className="w-16 h-16 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <UserCircle size={32} />
+                </div>
+                <h3 className="font-bold text-xl text-slate-800 mb-2">Nama Pelanggan Kosong!</h3>
+                <p className="text-slate-500 mb-6 text-sm">
+                    Untuk mencatat <b>Kasbon</b>, nama pelanggan wajib diisi agar tidak lupa.
+                </p>
+                <button 
+                    onClick={() => setShowKasbonWarning(false)} 
+                    className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold hover:bg-black transition-all shadow-lg"
+                >
+                    Siap, Saya Isi
+                </button>
+            </div>
+        </div>
+      )}
       
       {/* ADD USER MODAL */}
       {showAddUserModal && (

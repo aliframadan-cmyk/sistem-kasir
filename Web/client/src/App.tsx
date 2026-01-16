@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { 
   LayoutGrid, ShoppingCart, History, Search, LayoutDashboard,
-  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Eraser, ScanBarcode, Wallet, ArrowRight, UserCircle, KeyRound, Users, UserPlus, AlertTriangle, BookUser, Banknote, Tag, MessageCircle, Calendar, Phone, Printer, FileText
+  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Eraser, ScanBarcode, Wallet, ArrowRight, UserCircle, KeyRound, Users, UserPlus, AlertTriangle, BookUser, Banknote, Tag, MessageCircle, Calendar, Phone, Printer, FileText, Download
 } from 'lucide-react';
 
 // --- KONFIGURASI TOKO ---
@@ -84,7 +84,6 @@ const App = () => {
         return saved ? JSON.parse(saved) : [];
     } catch { return []; }
   });
-  // NEW STATE: Konfirmasi Hapus Riwayat
   const [showDeleteHistoryConfirm, setShowDeleteHistoryConfirm] = useState<string | null>(null);
 
   // --- POS STATE ---
@@ -296,13 +295,35 @@ const App = () => {
       return today > dueDate;
   };
 
-  const handleExportExcel = () => {
+  // --- EXPORT HISTORY EXCEL ---
+  const handleExportHistory = () => {
     if (riwayat.length === 0) return alert("Belum ada data.");
     const data = riwayat.flatMap(t => t.items.map(item => ({ "ID": t.id, "Tgl": t.tanggal, "Kasir": t.kasir, "Item": item.nama, "Harga": item.hargaEcer, "Qty": item.qty, "Subtotal": item.subtotal, "Total Trx": t.total, "Metode": t.metodePembayaran })));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Laporan");
     XLSX.writeFile(wb, `Laporan_${new Date().toLocaleDateString('id-ID').replace(/\//g,'-')}.xlsx`);
+  };
+
+  // --- EXPORT KASBON EXCEL (NEW FEATURE) ---
+  const handleExportKasbon = () => {
+      if (kasbonList.length === 0) return alert("Belum ada data kasbon.");
+      
+      const data = kasbonList.map(k => ({
+          "ID Transaksi": k.id,
+          "Tanggal": k.tanggal,
+          "Nama Pelanggan": k.namaPelanggan,
+          "Nomor HP": k.nomorHP,
+          "Jatuh Tempo": k.jatuhTempo,
+          "Total Hutang": k.total,
+          "Status": k.status,
+          "Detail Barang": k.items.map(i => `${i.nama} (${i.qty})`).join(', ')
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(data);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Data Kasbon");
+      XLSX.writeFile(wb, `Backup_Kasbon_${new Date().toLocaleDateString('id-ID').replace(/\//g, '-')}.xlsx`);
   };
 
   const handleDeleteHistory = () => {
@@ -596,8 +617,13 @@ const App = () => {
                         <h3 className="font-bold text-slate-700 flex items-center gap-2"><BookUser size={20} className="text-orange-500"/> Buku Kasbon</h3>
                         <p className="text-xs text-slate-400 mt-1">Kelola hutang & penagihan.</p>
                     </div>
-                    <div className="bg-orange-50 text-orange-600 px-4 py-2 rounded-xl text-xs font-bold border border-orange-100">
-                        Total Belum Lunas: Rp {stats.kasbonBelumLunas.toLocaleString()}
+                    <div className="flex items-center gap-3">
+                         <div className="bg-orange-50 text-orange-600 px-4 py-2 rounded-xl text-xs font-bold border border-orange-100">
+                             Total Belum Lunas: Rp {stats.kasbonBelumLunas.toLocaleString()}
+                         </div>
+                         <button onClick={handleExportKasbon} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl font-bold shadow-lg flex items-center gap-2 text-xs transition-all">
+                             <FileText size={16}/> Backup Excel
+                         </button>
                     </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -687,7 +713,7 @@ const App = () => {
              <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center">
                     <h3 className="font-bold text-slate-700 flex items-center gap-2"><History size={20} className="text-purple-500"/> Riwayat</h3>
-                    <button onClick={handleExportExcel} className="bg-green-600 text-white px-4 py-2 rounded-xl font-bold shadow-lg flex items-center gap-2 text-xs"><FileText size={16}/> Excel</button>
+                    <button onClick={handleExportHistory} className="bg-green-600 text-white px-4 py-2 rounded-xl font-bold shadow-lg flex items-center gap-2 text-xs"><FileText size={16}/> Excel</button>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm text-slate-600">
@@ -702,7 +728,6 @@ const App = () => {
                                     <td className="p-4 flex justify-center gap-2">
                                         <button onClick={() => handlePrintStruk(trx)} className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200" title="Print Struk"><Printer size={16}/></button>
                                         <button onClick={() => handleKirimWA(trx)} className="p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200" title="Kirim WA"><MessageCircle size={16}/></button>
-                                        {/* HANYA ADMIN YANG BISA HAPUS */}
                                         {currentUser?.role === 'admin' && (
                                             <button onClick={() => setShowDeleteHistoryConfirm(trx.id)} className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200" title="Hapus Riwayat"><Trash2 size={16}/></button>
                                         )}
@@ -772,7 +797,6 @@ const App = () => {
           </div>
       )}
 
-      {/* --- CONFIRM DELETE KASBON --- */}
       {showDeleteKasbonConfirm && (
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
               <div className="bg-white p-6 rounded-2xl shadow-xl max-w-sm w-full text-center">
@@ -787,7 +811,6 @@ const App = () => {
           </div>
       )}
 
-      {/* --- NEW: CONFIRM DELETE HISTORY (ADMIN ONLY) --- */}
       {showDeleteHistoryConfirm && (
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
               <div className="bg-white p-6 rounded-2xl shadow-xl max-w-sm w-full text-center animate-pop-in">

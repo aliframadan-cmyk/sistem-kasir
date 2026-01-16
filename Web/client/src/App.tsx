@@ -132,15 +132,19 @@ const App = () => {
   const [inputBayar, setInputBayar] = useState(""); 
 
   const [showEmptyWarning, setShowEmptyWarning] = useState(false);
-  // --- STATE BARU: POPUP UANG KURANG ---
   const [showKurangBayarModal, setShowKurangBayarModal] = useState(false);
 
   const [showSuccess, setShowSuccess] = useState(false); 
   const [showSaveSuccess, setShowSaveSuccess] = useState(false); 
+  
+  // STATE HAPUS PRODUK
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  
+  // STATE HAPUS RIWAYAT
   const [showDeleteHistoryConfirm, setShowDeleteHistoryConfirm] = useState(false);
   const [historyToDelete, setHistoryToDelete] = useState<string | null>(null);
+  
   const [showQrisModal, setShowQrisModal] = useState(false); 
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -181,7 +185,6 @@ const App = () => {
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('kasir_session', JSON.stringify(currentUser));
-      // AUTO REDIRECT SESUAI ROLE
       if (currentUser.role === 'kasir') setActiveTab('pos');
       else if (currentUser.role === 'admin') setActiveTab('dashboard');
     } else { localStorage.removeItem('kasir_session'); }
@@ -244,16 +247,41 @@ const App = () => {
     setDbUsers(updatedUsers); setShowPasswordModal(false); setPassForm({ oldPass: '', newPass: '', confirmPass: '' }); setShowPassSuccess(true);
   };
 
+  // --- MODIFIED EXCEL EXPORT (FIXED) ---
   const handleExportExcel = () => {
     if (riwayat.length === 0) return alert("Belum ada data.");
-    const data = riwayat.map(t => ({
-        "ID": t.id, "Tanggal": t.tanggal, "Kasir": t.kasir, "Metode": t.metodePembayaran, "Pelanggan": t.catatan || "-",
-        "Total": t.total, "Bayar": t.bayar
-    }));
+    
+    // Flatten logic: 1 Item = 1 Row for detailed report
+    const data = riwayat.flatMap(t => {
+        return t.items.map(item => ({
+             "ID Transaksi": t.id,
+             "Tanggal": t.tanggal,
+             "Waktu": t.waktu,
+             "Kasir": t.kasir,
+             "Nama Produk": item.nama,
+             "Kategori": item.kategori,
+             "Harga Satuan": item.hargaEcer,
+             "Qty": item.qty,
+             "Subtotal Barang": item.subtotal,
+             "Total Transaksi": t.total,
+             "Metode Bayar": t.metodePembayaran,
+             "Pelanggan": t.catatan || "-"
+        }));
+    });
+
     const ws = XLSX.utils.json_to_sheet(data);
+    
+    // Auto width for columns
+    const wscols = [
+        {wch: 20}, {wch: 12}, {wch: 10}, {wch: 15}, 
+        {wch: 25}, {wch: 15}, {wch: 12}, {wch: 8}, 
+        {wch: 15}, {wch: 15}, {wch: 12}, {wch: 20}
+    ];
+    ws['!cols'] = wscols;
+
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Laporan");
-    XLSX.writeFile(wb, `Laporan_${new Date().toLocaleDateString('id-ID').replace(/\//g,'-')}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "Laporan Detail");
+    XLSX.writeFile(wb, `Laporan_Detail_${new Date().toLocaleDateString('id-ID').replace(/\//g,'-')}.xlsx`);
   };
 
   const tambahKeKeranjang = (produk: Produk) => {
@@ -283,18 +311,14 @@ const App = () => {
 
   const handleBayarClick = () => {
       if (keranjang.length === 0) return setShowEmptyWarning(true);
-      
-      // LOGIKA BARU: POPUP UANG KURANG
       if (metodePembayaran === 'Cash' && isKurangBayar) {
         setShowKurangBayarModal(true);
         return;
       }
-      
       if (metodePembayaran === 'Kasbon' && !namaPelangganKasbon.trim()) {
           setShowKasbonWarning(true);
           return;
       }
-
       if (metodePembayaran === 'QRIS') setShowQrisModal(true);
       else executeTransaction();
   };
@@ -343,7 +367,21 @@ const App = () => {
   };
 
   const clickHapusProduk = (id: number) => { setDeleteTargetId(id); setShowDeleteConfirm(true); };
-  const executeDeleteProduk = () => { if (deleteTargetId !== null) { setProdukList(produkList.filter(p => p.id !== deleteTargetId)); setShowDeleteConfirm(false); setDeleteTargetId(null); } };
+  const executeDeleteProduk = () => { 
+      if (deleteTargetId !== null) { 
+          setProdukList(produkList.filter(p => p.id !== deleteTargetId)); 
+          setShowDeleteConfirm(false); 
+          setDeleteTargetId(null); 
+      } 
+  };
+  
+  const executeDeleteHistory = () => {
+      if (historyToDelete) {
+          setRiwayat(prev => prev.filter(t => t.id !== historyToDelete));
+          setShowDeleteHistoryConfirm(false);
+          setHistoryToDelete(null);
+      }
+  };
   
   const stats = useMemo(() => {
     const totalOmset = riwayat.reduce((acc, curr) => acc + curr.total, 0);
@@ -358,7 +396,7 @@ const App = () => {
     return { totalOmset, totalTransaksi: riwayat.length, itemsTerjual: riwayat.reduce((acc, curr) => acc + curr.items.reduce((a, b) => a + b.qty, 0), 0), topProduk, chartData, maxOmset, lowStockItems: produkList.filter(p => p.stok <= 5) };
   }, [riwayat, produkList]);
 
-  // --- RENDER LOGIN ---
+  // --- RENDER ---
   if (!currentUser) return (
     <div className="flex h-screen items-center justify-center bg-slate-900 text-slate-200 font-sans p-4">
       <div className="bg-white text-slate-800 p-8 rounded-3xl shadow-2xl w-full max-w-sm animate-pop-in">
@@ -378,48 +416,32 @@ const App = () => {
     </div>
   );
 
-  // --- RENDER MAIN APP ---
   return (
     <div className="flex h-screen bg-slate-50 text-slate-800 font-sans overflow-hidden">
-      {/* SIDEBAR */}
       <aside className="w-24 bg-slate-900 text-white flex flex-col items-center py-6 gap-2 shadow-2xl z-20">
         <div className="mb-6 p-2 bg-white/10 rounded-2xl"><img src={LOGO_URL} alt="Logo" className="w-10 h-10 object-contain"/></div>
-        
-        {/* DASHBOARD - HANYA ADMIN */}
         {currentUser?.role === 'admin' && (
              <button onClick={() => setActiveTab('dashboard')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><LayoutDashboard size={24}/> <span className="text-[10px] font-bold">Dash</span></button>
         )}
-        
-        {/* MENU KASIR (POS) - HANYA UNTUK ROLE KASIR */}
         {currentUser?.role === 'kasir' && (
           <button onClick={() => setActiveTab('pos')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'pos' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><ShoppingCart size={24}/> <span className="text-[10px] font-bold">Kasir</span></button>
         )}
-        
-        {/* MENU KASBON - HANYA UNTUK ADMIN */}
         {currentUser?.role === 'admin' && (
             <button onClick={() => setActiveTab('kasbon')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'kasbon' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><BookUser size={24}/> <span className="text-[10px] font-bold">Kasbon</span></button>
         )}
-
-        {/* PRODUK - HANYA ADMIN */}
         {currentUser?.role === 'admin' && (
              <button onClick={() => setActiveTab('inventory')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'inventory' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><LayoutGrid size={24}/> <span className="text-[10px] font-bold">Produk</span></button>
         )}
-
-        {/* RIWAYAT - SEMUA BISA */}
         <button onClick={() => setActiveTab('history')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'history' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><History size={24}/> <span className="text-[10px] font-bold">Riwayat</span></button>
-        
-        {/* MENU USERS - HANYA UNTUK ADMIN */}
         {currentUser?.role === 'admin' && (
           <button onClick={() => setActiveTab('users')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'users' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><Users size={24}/> <span className="text-[10px] font-bold">Users</span></button>
         )}
-
         <div className="mt-auto flex flex-col gap-2 w-full px-2">
             <button onClick={() => setShowPasswordModal(true)} className="p-3 rounded-xl bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-all"><KeyRound size={20} className="mx-auto"/></button>
             <button onClick={handleLogout} className="p-3 rounded-xl bg-red-900/50 text-red-400 hover:bg-red-600 hover:text-white transition-all"><LogOut size={20} className="mx-auto"/></button>
         </div>
       </aside>
 
-      {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col h-full overflow-hidden bg-slate-50">
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shadow-sm z-10 shrink-0">
           <h2 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-2">
@@ -442,7 +464,6 @@ const App = () => {
         </header>
 
         <div className="flex-1 overflow-auto p-4 md:p-6">
-          {/* DASHBOARD TAB - HANYA ADMIN */}
           {activeTab === 'dashboard' && currentUser?.role === 'admin' && (
             <div className="space-y-6 max-w-6xl mx-auto animate-fade-in">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -467,7 +488,6 @@ const App = () => {
                         <h3 className="text-3xl font-black text-slate-800 mt-1">{stats.lowStockItems.length} <span className="text-sm text-slate-400 font-normal">Item</span></h3>
                     </div>
                 </div>
-
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div className="lg:col-span-2 bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
                         <h3 className="font-bold text-lg mb-6 flex items-center gap-2"><TrendingUp size={20} className="text-blue-500"/> Grafik Penjualan (7 Hari)</h3>
@@ -501,10 +521,8 @@ const App = () => {
             </div>
           )}
 
-          {/* POS TAB - HANYA KASIR */}
           {activeTab === 'pos' && currentUser?.role === 'kasir' && (
             <div className="flex flex-col md:flex-row gap-4 h-[calc(100vh-100px)]">
-                {/* KIRI: PRODUK */}
                 <div className="flex-1 flex flex-col bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
                     <div className="p-4 border-b border-slate-100 flex gap-3 bg-white">
                         <div className="relative flex-1">
@@ -540,7 +558,6 @@ const App = () => {
                     </div>
                 </div>
 
-                {/* KANAN: KERANJANG */}
                 <div className="w-full md:w-[400px] bg-white rounded-3xl shadow-xl border border-slate-100 flex flex-col h-full z-10">
                     <div className="p-5 border-b border-slate-100 bg-slate-50/50 rounded-t-3xl">
                         <div className="flex justify-between items-center mb-1">
@@ -548,7 +565,6 @@ const App = () => {
                             <button onClick={() => setKeranjang([])} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors"><Eraser size={18}/></button>
                         </div>
                     </div>
-                    
                     <div className="flex-1 overflow-y-auto p-4 space-y-3">
                         {keranjang.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-3">
@@ -572,9 +588,7 @@ const App = () => {
                             ))
                         )}
                     </div>
-
                     <div className="p-5 bg-slate-50 border-t border-slate-200 rounded-b-3xl space-y-3 shadow-[0_-5px_20px_rgba(0,0,0,0.02)]">
-                        {/* SETTING TRANSAKSI */}
                         <div className="grid grid-cols-2 gap-2">
                             <div className="flex items-center justify-between bg-white p-2 px-3 rounded-xl border border-slate-200">
                                 <span className="text-xs font-bold text-slate-500">PPN 11%</span>
@@ -585,23 +599,18 @@ const App = () => {
                                 <input type="text" className="w-full text-right font-bold text-sm outline-none text-red-500 bg-transparent placeholder:text-slate-300" placeholder="Rp 0" value={inputDiskon} onChange={(e) => { const val = e.target.value.replace(/\D/g, ''); setInputDiskon(val ? "Rp " + parseInt(val).toLocaleString() : ""); }} />
                             </div>
                         </div>
-
-                        {/* RINGKASAN */}
                         <div className="space-y-1 pt-2">
                             <div className="flex justify-between text-xs text-slate-500 font-medium"><span>Subtotal</span><span>Rp {subtotalMurni.toLocaleString()}</span></div>
                             {nilaiDiskon > 0 && <div className="flex justify-between text-xs text-red-500 font-bold"><span>Diskon</span><span>- Rp {nilaiDiskon.toLocaleString()}</span></div>}
                             {ppnAktif && <div className="flex justify-between text-xs text-slate-500 font-medium"><span>PPN 11%</span><span>Rp {nilaiPPN.toLocaleString()}</span></div>}
                             <div className="flex justify-between text-xl font-black text-slate-800 pt-2 border-t border-slate-200 mt-2"><span>Total</span><span>Rp {totalAkhir.toLocaleString()}</span></div>
                         </div>
-
-                        {/* PEMBAYARAN */}
                         <div className="space-y-3 pt-2">
                             <div className="grid grid-cols-3 gap-2">
                                 <button onClick={() => setMetodePembayaran('Cash')} className={`py-2 rounded-xl text-xs font-bold border transition-all flex flex-col items-center gap-1 ${metodePembayaran === 'Cash' ? 'bg-green-100 border-green-300 text-green-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}><Banknote size={16}/> Tunai</button>
                                 <button onClick={() => setMetodePembayaran('QRIS')} className={`py-2 rounded-xl text-xs font-bold border transition-all flex flex-col items-center gap-1 ${metodePembayaran === 'QRIS' ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}><QrCode size={16}/> QRIS</button>
                                 <button onClick={() => setMetodePembayaran('Kasbon')} className={`py-2 rounded-xl text-xs font-bold border transition-all flex flex-col items-center gap-1 ${metodePembayaran === 'Kasbon' ? 'bg-orange-100 border-orange-300 text-orange-700' : 'bg-white border-slate-200 text-slate-500 hover:bg-slate-50'}`}><BookUser size={16}/> Kasbon</button>
                             </div>
-
                             {metodePembayaran === 'Cash' && (
                                 <div className="bg-white p-3 rounded-xl border-2 border-green-100 flex items-center gap-2">
                                     <Banknote className="text-green-500" size={20}/>
@@ -609,7 +618,6 @@ const App = () => {
                                         value={inputBayar} onChange={(e) => { const val = e.target.value.replace(/\D/g, ''); setInputBayar(val ? "Rp " + parseInt(val).toLocaleString() : ""); }} />
                                 </div>
                             )}
-
                             {metodePembayaran === 'Kasbon' && (
                                 <div className="bg-white p-3 rounded-xl border-2 border-orange-100 flex items-center gap-2 animate-bounce-in">
                                     <UserCircle className="text-orange-500" size={20}/>
@@ -617,7 +625,6 @@ const App = () => {
                                         value={namaPelangganKasbon} onChange={(e) => setNamaPelangganKasbon(e.target.value)} />
                                 </div>
                             )}
-
                             <button onClick={handleBayarClick} disabled={keranjang.length === 0} 
                                 className="w-full bg-slate-900 hover:bg-black text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-slate-300 transition-all active:scale-95 flex justify-center items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
                                 {metodePembayaran === 'Kasbon' ? 'Simpan Hutang' : 'Bayar Sekarang'} <ArrowRight size={20}/>
@@ -628,8 +635,7 @@ const App = () => {
             </div>
           )}
 
-            {/* KASBON TAB - HANYA ADMIN */}
-            {activeTab === 'kasbon' && currentUser?.role === 'admin' && (
+          {activeTab === 'kasbon' && currentUser?.role === 'admin' && (
              <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center">
                     <div>
@@ -640,7 +646,6 @@ const App = () => {
                         Total Belum Lunas: Rp {kasbonList.filter(k => k.status === 'Belum Lunas').reduce((a, b) => a + b.total, 0).toLocaleString()}
                     </div>
                 </div>
-                
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm text-slate-600">
                         <thead className="bg-slate-50 text-slate-400 uppercase font-bold text-xs">
@@ -700,7 +705,6 @@ const App = () => {
              </div>
           )}
 
-          {/* INVENTORY TAB - HANYA ADMIN */}
           {activeTab === 'inventory' && currentUser?.role === 'admin' && (
              <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center">
@@ -745,7 +749,6 @@ const App = () => {
              </div>
           )}
 
-          {/* HISTORY TAB - SEMUA BISA */}
           {activeTab === 'history' && (
              <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center">
@@ -754,7 +757,7 @@ const App = () => {
                         <p className="text-xs text-slate-400 mt-1">Rekap semua transaksi yang terjadi.</p>
                     </div>
                     <button onClick={handleExportExcel} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl font-bold shadow-lg shadow-green-200 transition-all flex items-center gap-2 text-xs">
-                        <FileText size={16}/> Download Excel
+                        <FileText size={16}/> Download Excel Detail
                     </button>
                 </div>
                 <div className="overflow-x-auto">
@@ -804,7 +807,6 @@ const App = () => {
              </div>
           )}
 
-          {/* USERS TAB - HANYA ADMIN */}
           {activeTab === 'users' && currentUser?.role === 'admin' && (
              <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden max-w-4xl mx-auto">
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center">
@@ -843,8 +845,6 @@ const App = () => {
       </main>
 
       {/* --- MODALS --- */}
-
-      {/* MODAL BARU: UANG KURANG */}
       {showKurangBayarModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4">
             <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-sm w-full animate-pop-in text-center relative overflow-hidden">
@@ -855,55 +855,28 @@ const App = () => {
                 <p className="text-slate-500 mb-6 text-sm">
                     Pembayaran tidak dapat diproses karena uang tunai kurang.
                 </p>
-                
                 <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-6 space-y-2">
-                    <div className="flex justify-between text-sm text-slate-500">
-                        <span>Total Belanja</span>
-                        <span className="font-bold text-slate-700">Rp {totalAkhir.toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between text-sm text-slate-500">
-                        <span>Uang Diterima</span>
-                        <span className="font-bold text-slate-700">Rp {nilaiBayar.toLocaleString()}</span>
-                    </div>
+                    <div className="flex justify-between text-sm text-slate-500"><span>Total Belanja</span><span className="font-bold text-slate-700">Rp {totalAkhir.toLocaleString()}</span></div>
+                    <div className="flex justify-between text-sm text-slate-500"><span>Uang Diterima</span><span className="font-bold text-slate-700">Rp {nilaiBayar.toLocaleString()}</span></div>
                     <div className="h-px bg-slate-200 my-2"></div>
-                    <div className="flex justify-between text-base font-bold text-red-600">
-                        <span>KURANG</span>
-                        <span>Rp {(totalAkhir - nilaiBayar).toLocaleString()}</span>
-                    </div>
+                    <div className="flex justify-between text-base font-bold text-red-600"><span>KURANG</span><span>Rp {(totalAkhir - nilaiBayar).toLocaleString()}</span></div>
                 </div>
-
-                <button 
-                    onClick={() => setShowKurangBayarModal(false)} 
-                    className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-black transition-all shadow-lg"
-                >
-                    Oke, Saya Cek Lagi
-                </button>
+                <button onClick={() => setShowKurangBayarModal(false)} className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-black transition-all shadow-lg">Oke, Saya Cek Lagi</button>
             </div>
         </div>
       )}
 
-      {/* POPUP WARNING KASBON NAME */}
       {showKasbonWarning && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
             <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-sm w-full animate-pop-in text-center">
-                <div className="w-16 h-16 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <UserCircle size={32} />
-                </div>
+                <div className="w-16 h-16 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center mx-auto mb-4"><UserCircle size={32} /></div>
                 <h3 className="font-bold text-xl text-slate-800 mb-2">Nama Pelanggan Kosong!</h3>
-                <p className="text-slate-500 mb-6 text-sm">
-                    Untuk mencatat <b>Kasbon</b>, nama pelanggan wajib diisi agar tidak lupa.
-                </p>
-                <button 
-                    onClick={() => setShowKasbonWarning(false)} 
-                    className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold hover:bg-black transition-all shadow-lg"
-                >
-                    Siap, Saya Isi
-                </button>
+                <p className="text-slate-500 mb-6 text-sm">Untuk mencatat <b>Kasbon</b>, nama pelanggan wajib diisi agar tidak lupa.</p>
+                <button onClick={() => setShowKasbonWarning(false)} className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold hover:bg-black transition-all shadow-lg">Siap, Saya Isi</button>
             </div>
         </div>
       )}
       
-      {/* ADD USER MODAL */}
       {showAddUserModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-sm w-full animate-pop-in">
@@ -912,10 +885,7 @@ const App = () => {
                     <input type="text" placeholder="Nama Lengkap" className="w-full bg-slate-50 p-3 rounded-xl border border-slate-200 outline-none focus:border-blue-500 font-bold" value={newUser.nama} onChange={e => setNewUser({...newUser, nama: e.target.value})}/>
                     <input type="text" placeholder="Username" className="w-full bg-slate-50 p-3 rounded-xl border border-slate-200 outline-none focus:border-blue-500 font-bold" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})}/>
                     <input type="password" placeholder="Password" className="w-full bg-slate-50 p-3 rounded-xl border border-slate-200 outline-none focus:border-blue-500 font-bold" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})}/>
-                    <select className="w-full bg-slate-50 p-3 rounded-xl border border-slate-200 outline-none font-bold text-slate-600" value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}>
-                        <option value="kasir">Kasir</option>
-                        <option value="admin">Admin</option>
-                    </select>
+                    <select className="w-full bg-slate-50 p-3 rounded-xl border border-slate-200 outline-none font-bold text-slate-600" value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}><option value="kasir">Kasir</option><option value="admin">Admin</option></select>
                 </div>
                 <div className="flex gap-3 mt-6">
                     <button onClick={() => setShowAddUserModal(false)} className="flex-1 bg-slate-100 text-slate-500 py-3 rounded-xl font-bold hover:bg-slate-200">Batal</button>
@@ -925,7 +895,6 @@ const App = () => {
         </div>
       )}
 
-      {/* PASSWORD MODAL */}
       {showPasswordModal && (
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
               <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-sm w-full animate-pop-in">
@@ -944,17 +913,12 @@ const App = () => {
           </div>
       )}
 
-      {/* CONFIRM LUNAS KASBON MODAL */}
       {showLunasConfirm && (
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
               <div className="bg-white p-6 rounded-2xl shadow-xl max-w-sm w-full animate-pop-in text-center">
-                  <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <Coins size={32} className="text-blue-600"/>
-                  </div>
+                  <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4"><Coins size={32} className="text-blue-600"/></div>
                   <h3 className="font-bold text-lg mb-2">Lunasi Hutang?</h3>
-                  <p className="text-slate-500 text-sm mb-6">
-                      Apakah pelanggan <b>{showLunasConfirm.nama}</b> sudah membayar lunas tagihannya?
-                  </p>
+                  <p className="text-slate-500 text-sm mb-6">Apakah pelanggan <b>{showLunasConfirm.nama}</b> sudah membayar lunas tagihannya?</p>
                   <div className="flex gap-3">
                       <button onClick={() => setShowLunasConfirm(null)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 rounded-xl font-bold">Batal</button>
                       <button onClick={() => handleLunasiKasbon(showLunasConfirm.id)} className="flex-1 bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold shadow-lg shadow-green-200">Ya, Lunas</button>
@@ -963,12 +927,10 @@ const App = () => {
           </div>
       )}
 
-      {/* SUCCESS MODALS */}
       {showAddUserSuccess && <div className="fixed inset-0 flex items-center justify-center z-[60] pointer-events-none"><div className="bg-green-500 text-white px-6 py-3 rounded-full font-bold shadow-xl animate-bounce-in flex items-center gap-2"><UserCheck size={20}/> User Berhasil Ditambahkan!</div></div>}
       {showPassSuccess && <div className="fixed inset-0 flex items-center justify-center z-[60] pointer-events-none"><div className="bg-slate-800 text-white px-6 py-3 rounded-full font-bold shadow-xl animate-bounce-in flex items-center gap-2"><KeyRound size={20}/> Password Berhasil Diganti!</div></div>}
       {showSaveSuccess && <div className="fixed inset-0 flex items-center justify-center z-[60] pointer-events-none"><div className="bg-blue-600 text-white px-6 py-3 rounded-full font-bold shadow-xl animate-bounce-in flex items-center gap-2"><CheckCircle2 size={20}/> Produk Disimpan!</div></div>}
 
-      {/* DELETE CONFIRMS */}
       {showDeleteUserConfirm && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-sm w-full animate-pop-in text-center">
@@ -982,8 +944,35 @@ const App = () => {
             </div>
         </div>
       )}
+      
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-sm w-full animate-pop-in text-center">
+                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500"><Trash2 size={32}/></div>
+                <h3 className="font-bold text-lg text-slate-800 mb-2">Hapus Produk?</h3>
+                <p className="text-slate-500 mb-6">Yakin ingin menghapus produk ini selamanya?</p>
+                <div className="flex gap-3">
+                    <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 bg-slate-100 py-3 rounded-xl font-bold text-slate-600 hover:bg-slate-200">Batal</button>
+                    <button onClick={executeDeleteProduk} className="flex-1 bg-red-500 py-3 rounded-xl font-bold text-white hover:bg-red-600 shadow-lg shadow-red-200">Hapus</button>
+                </div>
+            </div>
+        </div>
+      )}
 
-      {/* PRODUCT ADD MODAL */}
+      {showDeleteHistoryConfirm && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-sm w-full animate-pop-in text-center">
+                <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500"><Trash2 size={32}/></div>
+                <h3 className="font-bold text-lg text-slate-800 mb-2">Hapus Riwayat?</h3>
+                <p className="text-slate-500 mb-6">Data transaksi ini akan hilang permanen.</p>
+                <div className="flex gap-3">
+                    <button onClick={() => setShowDeleteHistoryConfirm(false)} className="flex-1 bg-slate-100 py-3 rounded-xl font-bold text-slate-600 hover:bg-slate-200">Batal</button>
+                    <button onClick={executeDeleteHistory} className="flex-1 bg-red-500 py-3 rounded-xl font-bold text-white hover:bg-red-600 shadow-lg shadow-red-200">Hapus</button>
+                </div>
+            </div>
+        </div>
+      )}
+
       {showAddModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-sm w-full animate-pop-in">
@@ -1005,7 +994,6 @@ const App = () => {
         </div>
       )}
 
-      {/* TRANSACTION SUCCESS MODAL */}
       {showSuccess && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full animate-pop-in overflow-hidden relative">
@@ -1040,7 +1028,6 @@ const App = () => {
         </div>
       )}
 
-       {/* QRIS MODAL */}
        {showQrisModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full animate-pop-in text-center p-6">
@@ -1060,7 +1047,6 @@ const App = () => {
         </div>
       )}
 
-      {/* WARNING EMPTY CART */}
       {showEmptyWarning && <div className="fixed inset-0 flex items-center justify-center z-[60]" onClick={() => setShowEmptyWarning(false)}><div className="bg-slate-800 text-white px-6 py-4 rounded-2xl font-bold shadow-2xl animate-bounce-in flex flex-col items-center gap-2"><ShoppingCart size={32} className="text-yellow-400"/><p>Keranjang masih kosong!</p><p className="text-xs font-normal text-slate-400">Pilih barang dulu sebelum bayar.</p></div></div>}
     </div>
   );

@@ -2,13 +2,12 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { 
   LayoutGrid, ShoppingCart, History, Search, LayoutDashboard,
-  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, UserCircle, KeyRound, Settings, Users, UserPlus, XCircle, UserCheck, AlertTriangle, Minus, Plus, Download, AlertOctagon, MessageCircle, FileText, Tag, CreditCard, Banknote, QrCode
+  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, UserCircle, KeyRound, Settings, Users, UserPlus, XCircle, UserCheck, AlertTriangle, Minus, Plus, Download, AlertOctagon, MessageCircle, FileText, Tag, CreditCard, Banknote, QrCode, Coins
 } from 'lucide-react';
 
 // --- KONFIGURASI TOKO ---
 const LOGO_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT_beJfa1EtbhzGt4z7dcWZM2EDGfwtCMZ3Pg&s"; 
 const NAMA_TOKO = "TOKO SUDAR";
-// GANTI URL INI DENGAN LINK GAMBAR QRIS ASLI ANDA
 const QRIS_IMAGE_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/QR_code_for_mobile_English_Wikipedia.svg/1200px-QR_code_for_mobile_English_Wikipedia.svg.png";
 
 // --- DATA AWAL PRODUK ---
@@ -22,7 +21,6 @@ const DATA_PRODUK_AWAL = [
   { id: 7, nama: "Kopi Kapal Api", kategori: "Minuman", stok: 2, hargaEcer: 1500, barcode: "8991007" },
 ];
 
-// --- DATA USER DEFAULT ---
 const DEFAULT_USERS = [
   { id: 1, username: 'admin', password: '123', role: 'admin', nama: 'Boss Admin' },
   { id: 2, username: 'kasir', password: '123', role: 'kasir', nama: 'Kasir Utama' },
@@ -41,13 +39,15 @@ interface HistoryTransaksi {
     diskon: number;
     ppn: number;      
     total: number;
+    bayar: number;     // NEW: Uang yang diterima
+    kembali: number;   // NEW: Kembalian
     metodePembayaran: string; 
 }
 interface UserSession { id: number; username: string; role: 'admin' | 'kasir'; nama: string; }
 interface UserData { id: number; username: string; password: string; role: string; nama: string; }
 
 const App = () => {
-  // --- STATE USER & LOGIN ---
+  // --- STATE USER ---
   const [dbUsers, setDbUsers] = useState<UserData[]>(() => {
     const saved = localStorage.getItem('db_users');
     return saved ? JSON.parse(saved) : DEFAULT_USERS;
@@ -61,14 +61,12 @@ const App = () => {
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
 
-  // --- STATE MANAJEMEN USER ---
+  // --- STATE MANAJEMEN USER & PASSWORD ---
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [showAddUserSuccess, setShowAddUserSuccess] = useState(false);
   const [showDeleteUserConfirm, setShowDeleteUserConfirm] = useState(false);
   const [userToDelete, setUserToDelete] = useState<{id: number, nama: string} | null>(null);
   const [newUser, setNewUser] = useState({ username: '', password: '', nama: '', role: 'kasir' });
-
-  // --- STATE GANTI PASSWORD ---
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [showPassSuccess, setShowPassSuccess] = useState(false);
   const [passForm, setPassForm] = useState({ oldPass: '', newPass: '', confirmPass: '' });
@@ -92,10 +90,11 @@ const App = () => {
   const [selectedCategory, setSelectedCategory] = useState("Semua");
   const [barcodeInput, setBarcodeInput] = useState("");
   
-  // --- STATE PPN, DISKON, & METODE BAYAR ---
+  // --- STATE TRANSAKSI ---
   const [ppnAktif, setPpnAktif] = useState(false);
   const [inputDiskon, setInputDiskon] = useState(""); 
   const [metodePembayaran, setMetodePembayaran] = useState<string>('Cash'); 
+  const [inputBayar, setInputBayar] = useState(""); // NEW: State untuk input uang
 
   // UI States
   const [showEmptyWarning, setShowEmptyWarning] = useState(false);
@@ -105,7 +104,7 @@ const App = () => {
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
   const [showDeleteHistoryConfirm, setShowDeleteHistoryConfirm] = useState(false);
   const [historyToDelete, setHistoryToDelete] = useState<string | null>(null);
-  const [showQrisModal, setShowQrisModal] = useState(false); // STATE BARU UNTUK QRIS
+  const [showQrisModal, setShowQrisModal] = useState(false); 
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -130,6 +129,18 @@ const App = () => {
   }, [ppnAktif, subtotalSetelahDiskon]);
 
   const totalAkhir = subtotalSetelahDiskon + nilaiPPN;
+
+  // --- LOGIKA KEMBALIAN ---
+  const nilaiBayar = useMemo(() => {
+    if (metodePembayaran === 'QRIS') return totalAkhir; // Jika QRIS, anggap bayar pas
+    return parseInt(inputBayar.replace(/\D/g, '')) || 0;
+  }, [inputBayar, metodePembayaran, totalAkhir]);
+
+  const nilaiKembalian = useMemo(() => {
+    return nilaiBayar - totalAkhir;
+  }, [nilaiBayar, totalAkhir]);
+
+  const isKurangBayar = metodePembayaran === 'Cash' && nilaiBayar < totalAkhir;
 
   const uniqueCategories = useMemo(() => {
     return ['Semua', ...new Set(produkList.map(item => item.kategori))];
@@ -179,6 +190,7 @@ const App = () => {
     setKeranjang([]); 
     setPpnAktif(false); 
     setInputDiskon(""); 
+    setInputBayar(""); // Reset input bayar
     setMetodePembayaran('Cash');
     setShowPassSuccess(false);
   };
@@ -189,24 +201,15 @@ const App = () => {
     pesan += `No: ${trx.id}\n`;
     pesan += `Tanggal: ${trx.tanggal} ${trx.waktu}\n`;
     pesan += `Kasir: ${trx.kasir}\n`;
-    pesan += `Metode Bayar: ${trx.metodePembayaran}\n`;
     pesan += `--------------------------------\n`;
     trx.items.forEach(item => {
         pesan += `${item.nama}\n`;
         pesan += `${item.qty} x ${item.hargaEcer.toLocaleString()} = ${item.subtotal.toLocaleString()}\n`;
     });
     pesan += `--------------------------------\n`;
-    pesan += `Subtotal: Rp ${trx.subtotal.toLocaleString()}\n`;
-    
-    if (trx.diskon > 0) {
-        pesan += `Diskon: - Rp ${trx.diskon.toLocaleString()}\n`;
-    }
-    
-    if (trx.ppn > 0) {
-        pesan += `PPN (11%): Rp ${trx.ppn.toLocaleString()}\n`;
-    }
-    
-    pesan += `*TOTAL BAYAR: Rp ${trx.total.toLocaleString()}*\n`;
+    pesan += `Total: Rp ${trx.total.toLocaleString()}\n`;
+    pesan += `Bayar: Rp ${trx.bayar.toLocaleString()}\n`;
+    pesan += `Kembali: Rp ${trx.kembali.toLocaleString()}\n`;
     pesan += `--------------------------------\n`;
     pesan += `Terima Kasih sudah berbelanja! 🙏`;
 
@@ -267,13 +270,12 @@ const App = () => {
         "Kasir": trx.kasir,
         "Metode Bayar": trx.metodePembayaran,
         "Detail Barang": trx.items.map(item => `${item.nama} (${item.qty})`).join(", "),
-        "Subtotal": trx.subtotal,
-        "Diskon": trx.diskon,
-        "PPN (11%)": trx.ppn,
-        "Total Bayar": trx.total
+        "Total": trx.total,
+        "Bayar": trx.bayar,
+        "Kembali": trx.kembali
     }));
     const worksheet = XLSX.utils.json_to_sheet(dataUntukExcel);
-    const wscols = [{wch: 20}, {wch: 15}, {wch: 10}, {wch: 15}, {wch: 15}, {wch: 50}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 15}];
+    const wscols = [{wch: 20}, {wch: 15}, {wch: 10}, {wch: 15}, {wch: 15}, {wch: 50}, {wch: 15}, {wch: 15}, {wch: 15}];
     worksheet['!cols'] = wscols;
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Laporan Penjualan");
@@ -281,7 +283,7 @@ const App = () => {
     XLSX.writeFile(workbook, `Laporan_Transaksi_${tanggalHariIni}.xlsx`);
   };
 
-  // --- LOGIKA POS (KERANJANG) ---
+  // --- LOGIKA POS ---
   const tambahKeKeranjang = (produk: Produk) => {
     if (produk.stok <= 0) return alert("Stok Habis!");
     setKeranjang(prev => {
@@ -312,23 +314,20 @@ const App = () => {
     else { alert(`Barang tidak ditemukan!`); setBarcodeInput(""); }
   };
 
-  // --- LOGIKA BAYAR UTAMA ---
+  // --- LOGIKA BAYAR ---
   const handleBayarClick = () => {
       if (keranjang.length === 0) return setShowEmptyWarning(true);
+      if (metodePembayaran === 'Cash' && isKurangBayar) return alert("Uang pembayaran kurang!");
       
-      // Jika Metode QRIS, Tampilkan Modal dulu
       if (metodePembayaran === 'QRIS') {
           setShowQrisModal(true);
       } else {
-          // Jika Cash, langsung eksekusi
           executeTransaction();
       }
   };
 
-  // --- PROSES TRANSAKSI (Dipanggil setelah scan QRIS atau langsung jika Cash) ---
   const executeTransaction = async () => {
     setIsLoading(true);
-    // Tutup modal QRIS jika terbuka
     setShowQrisModal(false);
 
     setTimeout(() => {
@@ -343,6 +342,8 @@ const App = () => {
             diskon: nilaiDiskon,
             ppn: nilaiPPN,
             total: totalAkhir,
+            bayar: nilaiBayar,      // SIMPAN NILAI BAYAR
+            kembali: nilaiKembalian, // SIMPAN KEMBALIAN
             metodePembayaran: metodePembayaran 
         };
         setRiwayat(prev => [trx, ...prev]); 
@@ -354,7 +355,8 @@ const App = () => {
         setKeranjang([]);
         setPpnAktif(false); 
         setInputDiskon(""); 
-        setMetodePembayaran('Cash'); // Reset ke Cash
+        setInputBayar(""); // Reset
+        setMetodePembayaran('Cash'); 
         setIsLoading(false);
         setShowSuccess(true);
     }, 800);
@@ -440,10 +442,10 @@ const App = () => {
             <hr className="border-dashed border-black my-2"/>
             <div className="text-left">{lastTrx.items.map(i => (<div key={i.id} className="flex justify-between"><span>{i.nama} <span className="text-[10px]"><br/>{i.qty} x {i.hargaEcer.toLocaleString()}</span></span><span>{i.subtotal.toLocaleString()}</span></div>))}</div>
             <hr className="border-dashed border-black my-2"/>
-            <div className="flex justify-between text-xs"><span>Subtotal</span><span>{lastTrx.subtotal.toLocaleString()}</span></div>
-            {lastTrx.diskon > 0 && <div className="flex justify-between text-xs"><span>Diskon</span><span>- {lastTrx.diskon.toLocaleString()}</span></div>}
-            {lastTrx.ppn > 0 && <div className="flex justify-between text-xs"><span>PPN (11%)</span><span>+{lastTrx.ppn.toLocaleString()}</span></div>}
+            {/* ITEM TOTAL STRUK */}
             <div className="flex justify-between font-bold text-lg border-t border-black mt-1 pt-1"><span>TOTAL</span><span>Rp {lastTrx.total.toLocaleString()}</span></div>
+            <div className="flex justify-between text-xs mt-2"><span>Bayar</span><span>Rp {lastTrx.bayar.toLocaleString()}</span></div>
+            <div className="flex justify-between text-xs font-bold"><span>Kembali</span><span>Rp {lastTrx.kembali.toLocaleString()}</span></div>
             <p className="text-center text-xs mt-4">Terima Kasih</p>
         </div>}
       </div>
@@ -567,7 +569,7 @@ const App = () => {
           {activeTab === 'history' && (
             <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center"><h3 className="font-bold text-slate-700">Riwayat Transaksi</h3><div className="flex gap-2"><button onClick={handleExportExcel} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl font-bold text-xs shadow-lg shadow-green-200 flex items-center gap-2"><Download size={16}/> Export Excel</button>{currentUser.role === 'admin' && (<button onClick={hapusSemuaRiwayat} className="bg-red-100 hover:bg-red-200 text-red-600 px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2"><Trash2 size={16}/> Reset</button>)}</div></div>
-                <div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-600"><thead className="bg-slate-50 text-slate-400 uppercase font-bold text-xs"><tr><th className="p-6">ID</th><th className="p-6">Waktu</th><th className="p-6">Metode</th><th className="p-6">Item</th><th className="p-6 text-right">Subtotal</th><th className="p-6 text-right">Diskon</th><th className="p-6 text-right">PPN</th><th className="p-6 text-right">Total</th><th className="p-6 text-center">Aksi</th></tr></thead><tbody>{riwayat.map(t => (<tr key={t.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors"><td className="p-6 font-mono text-xs font-bold text-slate-500">{t.id}</td><td className="p-6"><div className="font-bold text-slate-700">{t.tanggal}</div><div className="text-xs text-slate-400">{t.waktu}</div></td><td className="p-6"><span className={`px-2 py-1 rounded text-xs font-bold ${t.metodePembayaran === 'QRIS' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'}`}>{t.metodePembayaran}</span></td><td className="p-6 text-xs max-w-[200px] leading-relaxed">{t.items.map(i => `${i.nama} (${i.qty})`).join(', ')}</td><td className="p-6 text-right text-slate-400">Rp {t.subtotal.toLocaleString()}</td><td className="p-6 text-right text-red-400 font-bold">{t.diskon > 0 ? `- Rp ${t.diskon.toLocaleString()}` : '-'}</td><td className="p-6 text-right text-slate-400">{t.ppn > 0 ? `+ Rp ${t.ppn.toLocaleString()}` : '-'}</td><td className="p-6 text-right font-black text-slate-800 text-base">Rp {t.total.toLocaleString()}</td><td className="p-6 flex justify-center gap-2"><button onClick={() => { setLastTrx(t); setTimeout(() => window.print(), 100); }} className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg" title="Print Ulang"><Printer size={16}/></button><button onClick={() => handleKirimWA(t)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg" title="Kirim WA"><MessageCircle size={16}/></button>{currentUser.role === 'admin' && (<button onClick={() => clickHapusSatuRiwayat(t.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button>)}</td></tr>))}</tbody></table></div>
+                <div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-600"><thead className="bg-slate-50 text-slate-400 uppercase font-bold text-xs"><tr><th className="p-6">ID</th><th className="p-6">Waktu</th><th className="p-6">Metode</th><th className="p-6">Total</th><th className="p-6">Bayar/Kembali</th><th className="p-6 text-center">Aksi</th></tr></thead><tbody>{riwayat.map(t => (<tr key={t.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors"><td className="p-6 font-mono text-xs font-bold text-slate-500">{t.id}</td><td className="p-6"><div className="font-bold text-slate-700">{t.tanggal}</div><div className="text-xs text-slate-400">{t.waktu}</div></td><td className="p-6"><span className={`px-2 py-1 rounded text-xs font-bold ${t.metodePembayaran === 'QRIS' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'}`}>{t.metodePembayaran}</span></td><td className="p-6 font-black text-slate-800 text-base">Rp {t.total.toLocaleString()}</td><td className="p-6 text-xs"><div className="text-green-600">In: Rp {t.bayar.toLocaleString()}</div><div className="text-orange-500">Out: Rp {t.kembali.toLocaleString()}</div></td><td className="p-6 flex justify-center gap-2"><button onClick={() => { setLastTrx(t); setTimeout(() => window.print(), 100); }} className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg" title="Print Ulang"><Printer size={16}/></button><button onClick={() => handleKirimWA(t)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg" title="Kirim WA"><MessageCircle size={16}/></button>{currentUser.role === 'admin' && (<button onClick={() => clickHapusSatuRiwayat(t.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button>)}</td></tr>))}</tbody></table></div>
             </div>
           )}
 
@@ -645,10 +647,41 @@ const App = () => {
                             <QrCode size={16}/> QRIS/TF
                         </button>
                     </div>
+
+                    {/* INPUT UANG DITERIMA (KHUSUS CASH) */}
+                    {metodePembayaran === 'Cash' && (
+                        <div className="bg-white border border-slate-200 p-3 rounded-xl shadow-sm mt-2">
+                            <div className="flex justify-between items-center mb-1">
+                                <span className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1"><Banknote size={14}/> Uang Diterima</span>
+                                {isKurangBayar && inputBayar !== "" && <span className="text-xs text-red-500 font-bold">Kurang!</span>}
+                            </div>
+                            <input 
+                                type="text" 
+                                className={`w-full text-right text-lg font-black outline-none border-b-2 p-1 ${isKurangBayar ? 'border-red-500 text-red-600' : 'border-slate-200 text-slate-800 focus:border-blue-500'}`}
+                                placeholder="0"
+                                value={inputBayar}
+                                onChange={(e) => setInputBayar(e.target.value)}
+                            />
+                            {nilaiBayar > 0 && (
+                                <div className="flex justify-between items-center mt-2 pt-2 border-t border-dashed border-slate-200">
+                                    <span className="text-xs font-bold text-slate-500">Kembalian</span>
+                                    <span className={`font-black ${nilaiKembalian < 0 ? 'text-red-500' : 'text-green-600'}`}>
+                                        Rp {nilaiKembalian.toLocaleString()}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    )}
                     
                     <div className="border-t border-dashed border-slate-300 pt-3">
                         <div className="flex justify-between items-end mb-4"><span className="font-bold text-slate-800">Total Akhir</span><span className="font-black text-2xl text-blue-600">Rp {totalAkhir.toLocaleString()}</span></div>
-                        <button onClick={handleBayarClick} disabled={keranjang.length === 0 || isLoading} className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white py-4 rounded-xl font-black shadow-lg shadow-blue-200 flex justify-center items-center gap-2 transition-all active:scale-95">{isLoading ? 'Memproses...' : 'BAYAR SEKARANG'}</button>
+                        <button 
+                            onClick={handleBayarClick} 
+                            disabled={keranjang.length === 0 || isLoading || (metodePembayaran === 'Cash' && isKurangBayar)} 
+                            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white py-4 rounded-xl font-black shadow-lg shadow-blue-200 flex justify-center items-center gap-2 transition-all active:scale-95"
+                        >
+                            {isLoading ? 'Memproses...' : 'BAYAR SEKARANG'}
+                        </button>
                     </div>
                 </div>
             </aside>
@@ -664,7 +697,6 @@ const App = () => {
                   <p className="text-slate-500 text-sm mb-6">Silakan scan QR Code di bawah ini</p>
                   
                   <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 shadow-inner mb-6 inline-block">
-                     {/* GANTI SRC DI BAWAH JIKA INGIN GAMBAR QRIS LAIN */}
                       <img src={QRIS_IMAGE_URL} alt="QRIS Code" className="w-48 h-48 object-contain mx-auto" />
                   </div>
 
@@ -702,14 +734,19 @@ const App = () => {
         </div>
       )}
 
-      {/* POPUP SUKSES BAYAR */}
+      {/* POPUP SUKSES BAYAR (DENGAN KEMBALIAN) */}
       {showSuccess && lastTrx && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-white p-8 rounded-[2.5rem] shadow-2xl text-center max-w-sm w-full animate-pop-in relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-green-400 to-emerald-600"></div>
                 <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle2 size={48} className="text-green-600"/></div>
                 <h3 className="text-2xl font-black text-slate-800 mb-2">Pembayaran Sukses!</h3>
-                <p className="text-slate-500 font-medium mb-6">Total: <span className="text-slate-800 font-bold">Rp {lastTrx.total.toLocaleString()}</span></p>
+                <div className="bg-slate-50 p-4 rounded-xl mb-6 space-y-2">
+                    <div className="flex justify-between text-sm text-slate-500"><span>Total Tagihan</span><span className="font-bold text-slate-800">Rp {lastTrx.total.toLocaleString()}</span></div>
+                    <div className="flex justify-between text-sm text-slate-500"><span>Uang Diterima</span><span className="font-bold text-slate-800">Rp {lastTrx.bayar.toLocaleString()}</span></div>
+                    <div className="border-t border-dashed border-slate-300 my-2"></div>
+                    <div className="flex justify-between text-lg font-black text-green-600"><span>Kembalian</span><span>Rp {lastTrx.kembali.toLocaleString()}</span></div>
+                </div>
                 <div className="flex flex-col gap-3">
                     <button onClick={() => { window.print(); setShowSuccess(false); }} className="w-full bg-slate-800 hover:bg-slate-900 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2"><Printer size={20}/> Cetak Struk</button>
                     <button onClick={() => { handleKirimWA(lastTrx); setShowSuccess(false); }} className="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-xl font-bold flex items-center justify-center gap-2 shadow-lg shadow-green-200"><MessageCircle size={20}/> Kirim WhatsApp</button>

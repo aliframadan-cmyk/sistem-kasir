@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { 
   LayoutGrid, ShoppingCart, History, Search, LayoutDashboard,
-  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, UserCircle, KeyRound, Settings, Users, UserPlus, XCircle, UserCheck, AlertTriangle, Minus, Plus, Download, AlertOctagon, MessageCircle, FileText, Tag, CreditCard, Banknote, QrCode, Coins
+  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, UserCircle, KeyRound, Settings, Users, UserPlus, XCircle, UserCheck, AlertTriangle, Minus, Plus, Download, AlertOctagon, MessageCircle, FileText, Tag, CreditCard, Banknote, QrCode, Coins, ChevronDown
 } from 'lucide-react';
 
 // --- KONFIGURASI TOKO ---
@@ -80,9 +80,32 @@ const App = () => {
     return saved ? JSON.parse(saved) : DATA_PRODUK_AWAL;
   });
 
+  // --- STATE RIWAYAT (DIPERBAIKI UNTUK MENGATASI WHITE SCREEN) ---
   const [riwayat, setRiwayat] = useState<HistoryTransaksi[]>(() => {
-    const saved = localStorage.getItem('db_riwayat');
-    return saved ? JSON.parse(saved) : [];
+    try {
+        const saved = localStorage.getItem('db_riwayat');
+        if (!saved) return [];
+        const parsed = JSON.parse(saved);
+        
+        // FUNGSI SAFETY: Memastikan data lama punya format yang benar agar tidak crash
+        return parsed.map((t: any) => ({
+            id: t.id || `ERR-${Math.random()}`,
+            kasir: t.kasir || 'Unknown',
+            tanggal: t.tanggal || '-',
+            waktu: t.waktu || '-',
+            items: Array.isArray(t.items) ? t.items : [], // Pastikan items adalah array
+            subtotal: typeof t.subtotal === 'number' ? t.subtotal : (t.total || 0),
+            diskon: t.diskon || 0,
+            ppn: t.ppn || 0,
+            total: t.total || 0,
+            bayar: t.bayar || 0,
+            kembali: t.kembali || 0,
+            metodePembayaran: t.metodePembayaran || 'Cash'
+        }));
+    } catch (error) {
+        console.error("Data riwayat rusak, mereset data...", error);
+        return []; // Jika data rusak parah, return array kosong biar app jalan
+    }
   });
 
   const [keranjang, setKeranjang] = useState<ItemKeranjang[]>([]);
@@ -207,7 +230,6 @@ const App = () => {
         pesan += `${item.qty} x ${item.hargaEcer.toLocaleString()} = ${item.subtotal.toLocaleString()}\n`;
     });
     pesan += `--------------------------------\n`;
-    // TAMBAHAN LOGIKA WA AGAR MUNCUL RINCIAN
     pesan += `Subtotal: Rp ${trx.subtotal.toLocaleString()}\n`;
     if(trx.diskon > 0) pesan += `Diskon: -Rp ${trx.diskon.toLocaleString()}\n`;
     if(trx.ppn > 0) pesan += `PPN 11%: +Rp ${trx.ppn.toLocaleString()}\n`;
@@ -354,6 +376,7 @@ const App = () => {
             kembali: nilaiKembalian, 
             metodePembayaran: metodePembayaran 
         };
+        // Menggunakan functional update untuk memastikan state terbaru
         setRiwayat(prev => [trx, ...prev]); 
         setProdukList(prevList => prevList.map(p => { 
             const itemBeli = keranjang.find(k => k.id === p.id);
@@ -438,7 +461,7 @@ const App = () => {
         @media print { body * { visibility: hidden; } #struk-print, #struk-print * { visibility: visible; } #struk-print { display: block !important; position: absolute; left: 0; top: 0; width: 100%; } @page { margin: 0; size: auto; } }
       `}</style>
 
-      {/* STRUK PRINT (DIPERBAIKI) */}
+      {/* STRUK PRINT */}
       <div id="struk-print" className="hidden font-mono text-sm max-w-[80mm] mx-auto bg-white p-4">
         {lastTrx && <div className="text-center">
             <img src={LOGO_URL} alt="Logo" className="w-16 h-16 mx-auto mb-2 object-contain grayscale" />
@@ -453,16 +476,9 @@ const App = () => {
             
             <hr className="border-dashed border-black my-2"/>
             
-            {/* --- BAGIAN PERBAIKAN: SUBTOTAL, DISKON, PPN --- */}
             <div className="flex justify-between text-xs mb-1"><span>Subtotal</span><span>Rp {lastTrx.subtotal.toLocaleString()}</span></div>
-            
-            {lastTrx.diskon > 0 && (
-                <div className="flex justify-between text-xs mb-1"><span>Diskon</span><span>- Rp {lastTrx.diskon.toLocaleString()}</span></div>
-            )}
-            
-            {lastTrx.ppn > 0 && (
-                <div className="flex justify-between text-xs mb-1"><span>PPN 11%</span><span>+ Rp {lastTrx.ppn.toLocaleString()}</span></div>
-            )}
+            {lastTrx.diskon > 0 && <div className="flex justify-between text-xs mb-1"><span>Diskon</span><span>- Rp {lastTrx.diskon.toLocaleString()}</span></div>}
+            {lastTrx.ppn > 0 && <div className="flex justify-between text-xs mb-1"><span>PPN 11%</span><span>+ Rp {lastTrx.ppn.toLocaleString()}</span></div>}
             
             <div className="flex justify-between font-bold text-lg border-t border-black mt-2 pt-2"><span>TOTAL</span><span>Rp {lastTrx.total.toLocaleString()}</span></div>
             <div className="flex justify-between text-xs mt-2"><span>Bayar</span><span>Rp {lastTrx.bayar.toLocaleString()}</span></div>
@@ -586,11 +602,58 @@ const App = () => {
             </div>
           )}
 
-          {/* HISTORY TAB */}
+          {/* HISTORY TAB (DIPERBAIKI) */}
           {activeTab === 'history' && (
             <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center"><h3 className="font-bold text-slate-700">Riwayat Transaksi</h3><div className="flex gap-2"><button onClick={handleExportExcel} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl font-bold text-xs shadow-lg shadow-green-200 flex items-center gap-2"><Download size={16}/> Export Excel</button>{currentUser.role === 'admin' && (<button onClick={hapusSemuaRiwayat} className="bg-red-100 hover:bg-red-200 text-red-600 px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2"><Trash2 size={16}/> Reset</button>)}</div></div>
-                <div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-600"><thead className="bg-slate-50 text-slate-400 uppercase font-bold text-xs"><tr><th className="p-6">ID</th><th className="p-6">Waktu</th><th className="p-6">Metode</th><th className="p-6">Total</th><th className="p-6">Bayar/Kembali</th><th className="p-6 text-center">Aksi</th></tr></thead><tbody>{riwayat.map(t => (<tr key={t.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors"><td className="p-6 font-mono text-xs font-bold text-slate-500">{t.id}</td><td className="p-6"><div className="font-bold text-slate-700">{t.tanggal}</div><div className="text-xs text-slate-400">{t.waktu}</div></td><td className="p-6"><span className={`px-2 py-1 rounded text-xs font-bold ${t.metodePembayaran === 'QRIS' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'}`}>{t.metodePembayaran}</span></td><td className="p-6 font-black text-slate-800 text-base">Rp {t.total.toLocaleString()}</td><td className="p-6 text-xs"><div className="text-green-600">In: Rp {t.bayar.toLocaleString()}</div><div className="text-orange-500">Out: Rp {t.kembali.toLocaleString()}</div></td><td className="p-6 flex justify-center gap-2"><button onClick={() => { setLastTrx(t); setTimeout(() => window.print(), 100); }} className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg" title="Print Ulang"><Printer size={16}/></button><button onClick={() => handleKirimWA(t)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg" title="Kirim WA"><MessageCircle size={16}/></button>{currentUser.role === 'admin' && (<button onClick={() => clickHapusSatuRiwayat(t.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button>)}</td></tr>))}</tbody></table></div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm text-slate-600">
+                        <thead className="bg-slate-50 text-slate-400 uppercase font-bold text-xs">
+                            <tr>
+                                <th className="p-6">ID & Waktu</th>
+                                <th className="p-6">Metode</th>
+                                <th className="p-6">Rincian Harga</th>
+                                <th className="p-6">Total Akhir</th>
+                                <th className="p-6">Bayar/Kembali</th>
+                                <th className="p-6 text-center">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {riwayat.length === 0 ? (
+                                <tr>
+                                    <td colSpan={6} className="p-8 text-center text-slate-400 font-bold">Belum ada transaksi</td>
+                                </tr>
+                            ) : riwayat.map(t => (
+                                <tr key={t.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
+                                    <td className="p-6">
+                                        <div className="font-mono text-xs font-bold text-slate-500">{t.id}</div>
+                                        <div className="font-bold text-slate-700 mt-1">{t.tanggal}</div>
+                                        <div className="text-xs text-slate-400">{t.waktu}</div>
+                                    </td>
+                                    <td className="p-6">
+                                        <span className={`px-2 py-1 rounded text-xs font-bold ${t.metodePembayaran === 'QRIS' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'}`}>{t.metodePembayaran}</span>
+                                    </td>
+                                    {/* KOLOM BARU: RINCIAN HARGA */}
+                                    <td className="p-6 text-xs space-y-1">
+                                        <div className="flex justify-between w-40"><span>Sub:</span> <span className="font-bold">Rp {t.subtotal.toLocaleString()}</span></div>
+                                        {t.diskon > 0 && <div className="flex justify-between w-40 text-red-500"><span>Disc:</span> <span>-Rp {t.diskon.toLocaleString()}</span></div>}
+                                        {t.ppn > 0 && <div className="flex justify-between w-40 text-blue-600"><span>PPN:</span> <span>+Rp {t.ppn.toLocaleString()}</span></div>}
+                                    </td>
+                                    <td className="p-6 font-black text-slate-800 text-base">Rp {t.total.toLocaleString()}</td>
+                                    <td className="p-6 text-xs">
+                                        <div className="text-green-600">In: Rp {t.bayar.toLocaleString()}</div>
+                                        <div className="text-orange-500">Out: Rp {t.kembali.toLocaleString()}</div>
+                                    </td>
+                                    <td className="p-6 flex justify-center gap-2">
+                                        <button onClick={() => { setLastTrx(t); setTimeout(() => window.print(), 100); }} className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg" title="Print Ulang"><Printer size={16}/></button>
+                                        <button onClick={() => handleKirimWA(t)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg" title="Kirim WA"><MessageCircle size={16}/></button>
+                                        {currentUser.role === 'admin' && (<button onClick={() => clickHapusSatuRiwayat(t.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button>)}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
           )}
 
@@ -709,7 +772,7 @@ const App = () => {
         )}
       </div>
 
-      {/* MODAL QRIS PAYMENT (BARU) */}
+      {/* MODAL QRIS PAYMENT */}
       {showQrisModal && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
               <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl animate-pop-in relative overflow-hidden text-center">

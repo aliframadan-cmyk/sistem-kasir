@@ -1,0 +1,51 @@
+/* Custom Scrollbar untuk Keranjang */
+#cart-items::-webkit-scrollbar {
+    width: 5px;
+}
+
+#cart-items::-webkit-scrollbar-thumb {
+    background: #e2e8f0;
+    border-radius: 10px;
+}
+
+/* Animasi saat item masuk keranjang */
+.animate-fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Gaya khusus untuk baris tabel agar mirip gambar */
+.product-row:hover {
+    background-color: #f8fafc;
+    cursor: pointer;
+}
+
+.badge-makanan {
+    background-color: #f1f5f9;
+    color: #64748b;
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.stok-high {
+    color: #22c55e; /* Hijau seperti di gambar */
+    font-weight: 700;
+}
+
+/* Tombol Aksi */
+.btn-edit {
+    color: #2563eb;
+    font-weight: 600;
+    margin-right: 10px;
+}
+
+.btn-hapus {
+    color: #ef4444;
+    font-weight: 600;
+}

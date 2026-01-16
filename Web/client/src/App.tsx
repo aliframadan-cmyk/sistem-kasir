@@ -2,12 +2,14 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { 
   LayoutGrid, ShoppingCart, History, Search, LayoutDashboard,
-  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, UserCircle, KeyRound, Users, UserPlus, UserCheck, AlertTriangle, BookUser, Banknote, QrCode, Coins, FileText, Tag, MessageCircle, Calendar, Phone, BellRing
+  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Eraser, ScanBarcode, Wallet, ArrowRight, UserCircle, KeyRound, Users, UserPlus, AlertTriangle, BookUser, Banknote, Tag, MessageCircle, Calendar, Phone, Printer, FileText
 } from 'lucide-react';
 
 // --- KONFIGURASI TOKO ---
 const LOGO_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT_beJfa1EtbhzGt4z7dcWZM2EDGfwtCMZ3Pg&s"; 
 const NAMA_TOKO = "TOKO SUDAR";
+const ALAMAT_TOKO = "Jl. Raya Makmur No. 123";
+const TELP_TOKO = "0812-3456-7890";
 
 // --- DATA AWAL ---
 const DATA_PRODUK_AWAL = [
@@ -33,13 +35,12 @@ interface HistoryTransaksi {
 }
 interface UserSession { id: number; username: string; role: 'admin' | 'kasir'; nama: string; }
 interface UserData { id: number; username: string; password: string; role: string; nama: string; }
-// Update Interface Kasbon: Tambah Jatuh Tempo & No HP
 interface KasbonData {
     id: string; 
     tanggal: string;
     namaPelanggan: string;
-    nomorHP: string;         // <--- Baru
-    jatuhTempo: string;      // <--- Baru (Format YYYY-MM-DD)
+    nomorHP: string;
+    jatuhTempo: string;
     total: number;
     status: 'Belum Lunas' | 'Lunas';
     items: ItemKeranjang[];
@@ -58,19 +59,6 @@ const App = () => {
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
 
-  // --- STATE MODALS & ALERTS ---
-  const [showKasbonWarning, setShowKasbonWarning] = useState(false);
-  const [kasbonWarningMsg, setKasbonWarningMsg] = useState(""); // Pesan error dinamis
-  const [showAddUserModal, setShowAddUserModal] = useState(false);
-  const [showAddUserSuccess, setShowAddUserSuccess] = useState(false);
-  const [showDeleteUserConfirm, setShowDeleteUserConfirm] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<{id: number, nama: string} | null>(null);
-  const [newUser, setNewUser] = useState({ username: '', password: '', nama: '', role: 'kasir' });
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
-  const [showPassSuccess, setShowPassSuccess] = useState(false);
-  const [passForm, setPassForm] = useState({ oldPass: '', newPass: '', confirmPass: '' });
-  const [passError, setPassError] = useState('');
-
   // --- STATE UTAMA ---
   const [activeTab, setActiveTab] = useState<'dashboard' | 'pos' | 'inventory' | 'history' | 'users' | 'kasbon'>('dashboard');
   const [produkList, setProdukList] = useState<Produk[]>(() => {
@@ -78,16 +66,18 @@ const App = () => {
     return saved ? JSON.parse(saved) : DATA_PRODUK_AWAL;
   });
 
-  // --- STATE KASBON (Updated) ---
+  // --- STATE KASBON ---
   const [kasbonList, setKasbonList] = useState<KasbonData[]>(() => {
       const saved = localStorage.getItem('db_kasbon');
       return saved ? JSON.parse(saved) : [];
   });
   const [namaPelangganKasbon, setNamaPelangganKasbon] = useState("");
-  const [nomorHPKasbon, setNomorHPKasbon] = useState(""); // Input No HP
-  const [jatuhTempoKasbon, setJatuhTempoKasbon] = useState(""); // Input Tanggal
+  const [nomorHPKasbon, setNomorHPKasbon] = useState(""); 
+  const [jatuhTempoKasbon, setJatuhTempoKasbon] = useState(""); 
   const [showLunasConfirm, setShowLunasConfirm] = useState<{id: string, nama: string} | null>(null);
+  const [showDeleteKasbonConfirm, setShowDeleteKasbonConfirm] = useState<string | null>(null);
 
+  // --- STATE RIWAYAT ---
   const [riwayat, setRiwayat] = useState<HistoryTransaksi[]>(() => {
     try {
         const saved = localStorage.getItem('db_riwayat');
@@ -95,6 +85,7 @@ const App = () => {
     } catch { return []; }
   });
 
+  // --- POS STATE ---
   const [keranjang, setKeranjang] = useState<ItemKeranjang[]>([]);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Semua");
@@ -105,6 +96,16 @@ const App = () => {
   const [metodePembayaran, setMetodePembayaran] = useState<string>('Cash'); 
   const [inputBayar, setInputBayar] = useState(""); 
 
+  // --- MODALS STATE ---
+  const [showKasbonWarning, setShowKasbonWarning] = useState(false);
+  const [kasbonWarningMsg, setKasbonWarningMsg] = useState("");
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [showDeleteUserConfirm, setShowDeleteUserConfirm] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<{id: number, nama: string} | null>(null);
+  
+  const [newUser, setNewUser] = useState({ username: '', password: '', nama: '', role: 'kasir' });
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+
   const [showEmptyWarning, setShowEmptyWarning] = useState(false);
   const [showKurangBayarModal, setShowKurangBayarModal] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false); 
@@ -112,9 +113,6 @@ const App = () => {
   
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
-  const [showDeleteHistoryConfirm, setShowDeleteHistoryConfirm] = useState(false);
-  const [historyToDelete, setHistoryToDelete] = useState<string | null>(null);
-  const [showQrisModal, setShowQrisModal] = useState(false); 
   const [showAddModal, setShowAddModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
@@ -125,12 +123,16 @@ const App = () => {
 
   // --- CALCULATIONS ---
   const subtotalMurni = useMemo(() => keranjang.reduce((a, b) => a + b.subtotal, 0), [keranjang]);
+  
   const nilaiDiskon = useMemo(() => {
     const val = parseInt(inputDiskon.replace(/\D/g, '')) || 0;
     return val > subtotalMurni ? subtotalMurni : val; 
   }, [inputDiskon, subtotalMurni]);
+
   const subtotalSetelahDiskon = subtotalMurni - nilaiDiskon;
+  
   const nilaiPPN = useMemo(() => (ppnAktif ? Math.round(subtotalSetelahDiskon * 0.11) : 0), [ppnAktif, subtotalSetelahDiskon]);
+  
   const totalAkhir = subtotalSetelahDiskon + nilaiPPN;
 
   const nilaiBayar = useMemo(() => {
@@ -158,7 +160,6 @@ const App = () => {
     } else { localStorage.removeItem('kasir_session'); }
   }, [currentUser]);
 
-  // Set Default Jatuh Tempo (Hari ini + 7 Hari) saat Kasbon dipilih
   useEffect(() => {
     if (metodePembayaran === 'Kasbon') {
         const date = new Date();
@@ -181,24 +182,79 @@ const App = () => {
     setCurrentUser(null); setKeranjang([]); setPpnAktif(false); setInputDiskon(""); setInputBayar(""); setMetodePembayaran('Cash');
   };
 
+  // --- PRINT STRUK (THERMAL) ---
+  const handlePrintStruk = (trx: HistoryTransaksi) => {
+    const printWindow = window.open('', '', 'width=350,height=600');
+    if (!printWindow) return alert("Pop-up blocked!");
+
+    const itemsHtml = trx.items.map(item => `
+      <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+        <span style="font-size: 12px;">${item.nama} x${item.qty}</span>
+        <span style="font-size: 12px; font-weight: bold;">${(item.hargaEcer * item.qty).toLocaleString()}</span>
+      </div>
+    `).join('');
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Struk - ${trx.id}</title>
+          <style>
+            body { font-family: 'Courier New', monospace; padding: 10px; width: 58mm; margin: 0 auto; color: #000; }
+            .header { text-align: center; margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 5px; }
+            .items { margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 5px; }
+            .totals { text-align: right; }
+            .footer { text-align: center; margin-top: 15px; font-size: 10px; }
+            h2 { margin: 0; font-size: 16px; font-weight: bold; }
+            p { margin: 2px 0; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <h2>${NAMA_TOKO}</h2>
+            <p>${ALAMAT_TOKO}</p>
+            <p>${TELP_TOKO}</p>
+            <p style="margin-top:5px;">${trx.id}</p>
+            <p>${trx.tanggal} ${trx.waktu}</p>
+            <p>Kasir: ${trx.kasir}</p>
+          </div>
+          <div class="items">
+            ${itemsHtml}
+          </div>
+          <div class="totals">
+             ${trx.diskon > 0 ? `<p>Diskon: -${trx.diskon.toLocaleString()}</p>` : ''}
+             ${trx.ppn > 0 ? `<p>PPN 11%: ${trx.ppn.toLocaleString()}</p>` : ''}
+             <p style="font-size: 14px; font-weight: bold; margin-top:5px;">TOTAL: ${trx.total.toLocaleString()}</p>
+             <p>Bayar: ${trx.bayar.toLocaleString()}</p>
+             <p>Kembali: ${trx.kembali.toLocaleString()}</p>
+             <p>Metode: ${trx.metodePembayaran}</p>
+          </div>
+          <div class="footer">
+            <p>Terima Kasih</p>
+            <p>Barang yang dibeli tidak dapat ditukar</p>
+          </div>
+          <script>
+            window.onload = function() { window.print(); window.close(); }
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   const handleKirimWA = (trx: HistoryTransaksi) => {
-    // Pesan Struk Biasa
     let pesan = `*STRUK BELANJA - ${NAMA_TOKO}*\nNo: ${trx.id}\nTanggal: ${trx.tanggal}\n`;
     trx.items.forEach(item => { pesan += `${item.nama} (${item.qty}x) : Rp ${item.subtotal.toLocaleString()}\n`; });
+    if(trx.diskon > 0) pesan += `Diskon: - Rp ${trx.diskon.toLocaleString()}\n`;
+    if(trx.ppn > 0) pesan += `PPN (11%): Rp ${trx.ppn.toLocaleString()}\n`;
     pesan += `*Total: Rp ${trx.total.toLocaleString()}*`;
     window.open(`https://wa.me/?text=${encodeURIComponent(pesan)}`, '_blank');
   };
 
-  // --- FUNGSI TAGIH WA OTOMATIS (FITUR BARU) ---
   const handleTagihHutangWA = (kasbon: KasbonData) => {
-      // Format nomor HP (ganti 08 jadi 628)
       let phone = kasbon.nomorHP.replace(/\D/g,'');
       if (phone.startsWith('0')) phone = '62' + phone.substring(1);
-      
       const jatuhTempoIndo = new Date(kasbon.jatuhTempo).toLocaleDateString('id-ID', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
-
       const pesan = `Halo Kak *${kasbon.namaPelanggan}*,\n\nKami dari *${NAMA_TOKO}* ingin mengingatkan bahwa tagihan kasbon sebesar *Rp ${kasbon.total.toLocaleString()}* akan/sudah jatuh tempo pada:\n📅 *${jatuhTempoIndo}*\n\nMohon segera melakukan pembayaran ya kak agar bisa belanja kembali.\n\nTerima kasih! 🙏`;
-
       window.open(`https://wa.me/${phone}?text=${encodeURIComponent(pesan)}`, '_blank');
   };
 
@@ -211,10 +267,7 @@ const App = () => {
 
   const handleExportExcel = () => {
     if (riwayat.length === 0) return alert("Belum ada data.");
-    const data = riwayat.flatMap(t => t.items.map(item => ({
-             "ID": t.id, "Tgl": t.tanggal, "Kasir": t.kasir, "Item": item.nama, "Harga": item.hargaEcer,
-             "Qty": item.qty, "Subtotal": item.subtotal, "Total Trx": t.total, "Metode": t.metodePembayaran
-        })));
+    const data = riwayat.flatMap(t => t.items.map(item => ({ "ID": t.id, "Tgl": t.tanggal, "Kasir": t.kasir, "Item": item.nama, "Harga": item.hargaEcer, "Qty": item.qty, "Subtotal": item.subtotal, "Total Trx": t.total, "Metode": t.metodePembayaran })));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Laporan");
@@ -226,8 +279,7 @@ const App = () => {
     setKeranjang(prev => {
         const item = prev.find(k => k.id === produk.id);
         if (item && item.qty + 1 > produk.stok) { alert("Stok kurang!"); return prev; }
-        return item ? prev.map(k => k.id === produk.id ? { ...k, qty: k.qty + 1, subtotal: (k.qty + 1) * k.hargaEcer } : k) 
-                    : [...prev, { ...produk, qty: 1, subtotal: produk.hargaEcer }];
+        return item ? prev.map(k => k.id === produk.id ? { ...k, qty: k.qty + 1, subtotal: (k.qty + 1) * k.hargaEcer } : k) : [...prev, { ...produk, qty: 1, subtotal: produk.hargaEcer }];
     });
   };
 
@@ -248,29 +300,17 @@ const App = () => {
   const handleBayarClick = () => {
       if (keranjang.length === 0) return setShowEmptyWarning(true);
       if (metodePembayaran === 'Cash' && isKurangBayar) return setShowKurangBayarModal(true);
-      
-      // Validasi Kasbon
       if (metodePembayaran === 'Kasbon') {
-          if (!namaPelangganKasbon.trim()) {
-              setKasbonWarningMsg("Nama Pelanggan Wajib Diisi!");
-              setShowKasbonWarning(true); return;
-          }
-          if (!jatuhTempoKasbon) {
-              setKasbonWarningMsg("Tanggal Jatuh Tempo Wajib Diisi!");
-              setShowKasbonWarning(true); return;
-          }
-          if (!nomorHPKasbon.trim()) {
-              setKasbonWarningMsg("Nomor WA Wajib Diisi untuk Penagihan!");
+          if (!namaPelangganKasbon.trim() || !jatuhTempoKasbon || !nomorHPKasbon.trim()) {
+              setKasbonWarningMsg("Mohon lengkapi Nama, Tanggal & No WA!");
               setShowKasbonWarning(true); return;
           }
       }
-      
-      if (metodePembayaran === 'QRIS') setShowQrisModal(true);
-      else executeTransaction();
+      executeTransaction();
   };
 
   const executeTransaction = async () => {
-    setIsLoading(true); setShowQrisModal(false);
+    setIsLoading(true); 
     setTimeout(() => {
         const now = new Date();
         const trxId = `INV-${Date.now()}`;
@@ -285,9 +325,7 @@ const App = () => {
         if (metodePembayaran === 'Kasbon') {
             const newKasbon: KasbonData = {
                 id: trxId, tanggal: trx.tanggal, 
-                namaPelanggan: namaPelangganKasbon,
-                nomorHP: nomorHPKasbon,           // Simpan No HP
-                jatuhTempo: jatuhTempoKasbon,     // Simpan Tanggal
+                namaPelanggan: namaPelangganKasbon, nomorHP: nomorHPKasbon, jatuhTempo: jatuhTempoKasbon,
                 total: totalAkhir, status: 'Belum Lunas', items: [...keranjang]
             };
             setKasbonList(prev => [newKasbon, ...prev]);
@@ -299,9 +337,8 @@ const App = () => {
             return item ? { ...p, stok: p.stok - item.qty } : p;
         }));
         
-        // Reset Form
         setLastTrx(trx); setKeranjang([]); setPpnAktif(false); setInputDiskon(""); setInputBayar(""); 
-        setNamaPelangganKasbon(""); setNomorHPKasbon(""); setJatuhTempoKasbon(""); // Reset input kasbon
+        setNamaPelangganKasbon(""); setNomorHPKasbon(""); setJatuhTempoKasbon(""); 
         setMetodePembayaran('Cash'); setIsLoading(false); setShowSuccess(true);
     }, 800);
   };
@@ -311,20 +348,19 @@ const App = () => {
       setShowLunasConfirm(null);
   };
 
-  const handleAddUser = () => {
-      // Logic Add User (Sama seperti sebelumnya)
-      const newId = dbUsers.length > 0 ? Math.max(...dbUsers.map(u => u.id)) + 1 : 1;
-      setDbUsers(prev => [...prev, { id: newId, ...newUser }]); setShowAddUserModal(false); setShowAddUserSuccess(true);
+  const handleDeleteKasbon = () => {
+      if (!showDeleteKasbonConfirm) return;
+      setKasbonList(prev => prev.filter(k => k.id !== showDeleteKasbonConfirm));
+      setShowDeleteKasbonConfirm(null);
   };
+
   const handleSimpanProduk = () => {
-    // Logic Simpan Produk
     const productData = { nama: newItem.name, kategori: newItem.category, stok: parseInt(newItem.stockPcs)||0, hargaEcer: parseInt(newItem.pricePcs)||0, barcode: newItem.barcode };
     if (editId) { setProdukList(produkList.map(p => p.id === editId ? { ...p, ...productData } : p)); } 
     else { const newId = produkList.length > 0 ? Math.max(...produkList.map(p => p.id)) + 1 : 1; setProdukList([...produkList, { id: newId, ...productData }]); }
     setShowAddModal(false); setShowSaveSuccess(true);
   };
 
-  // Stats Dashboard
   const stats = useMemo(() => {
     const totalOmset = riwayat.reduce((acc, curr) => acc + curr.total, 0);
     const chartData = [...Array(7)].map((_, i) => {
@@ -408,7 +444,6 @@ const App = () => {
                         <h3 className="text-3xl font-black text-slate-800 mt-1">{stats.itemsTerjual}</h3>
                     </div>
                 </div>
-                {/* Chart placeholder */}
                 <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm h-64 flex items-end justify-between gap-2">
                      {stats.chartData.map((d, i) => (
                         <div key={i} className="flex flex-col items-center gap-2 flex-1 group">
@@ -423,7 +458,6 @@ const App = () => {
           {/* --- POS (KASIR) --- */}
           {activeTab === 'pos' && currentUser?.role === 'kasir' && (
             <div className="flex flex-col md:flex-row gap-4 h-[calc(100vh-100px)]">
-                {/* List Produk */}
                 <div className="flex-1 flex flex-col bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
                     <div className="p-4 border-b border-slate-100 flex gap-3 bg-white">
                         <div className="relative flex-1">
@@ -450,7 +484,6 @@ const App = () => {
                     </div>
                 </div>
 
-                {/* Keranjang & Checkout */}
                 <div className="w-full md:w-[400px] bg-white rounded-3xl shadow-xl border border-slate-100 flex flex-col h-full z-10">
                     <div className="p-5 border-b border-slate-100 bg-slate-50/50 rounded-t-3xl flex justify-between items-center">
                         <h3 className="font-black text-slate-800 text-lg flex items-center gap-2"><ShoppingCart size={20} className="text-blue-600"/> Keranjang</h3>
@@ -466,43 +499,39 @@ const App = () => {
                         ))}
                     </div>
                     <div className="p-5 bg-slate-50 border-t border-slate-200 rounded-b-3xl space-y-3">
+                         {/* DISKON DAN PPN DIKEMBALIKAN DISINI */}
+                         <div className="space-y-2">
+                             <div className="flex justify-between items-center">
+                                 <input type="text" placeholder="Diskon (Rp)" className="bg-white border border-slate-200 rounded-lg px-3 py-1 text-xs font-bold w-32 outline-none" value={inputDiskon} onChange={(e) => { const val = e.target.value.replace(/\D/g, ''); setInputDiskon(val ? "Rp " + parseInt(val).toLocaleString() : ""); }} />
+                                 <label className="flex items-center gap-2 cursor-pointer">
+                                     <span className="text-xs font-bold text-slate-500">PPN 11%</span>
+                                     <input type="checkbox" checked={ppnAktif} onChange={() => setPpnAktif(!ppnAktif)} className="w-4 h-4 accent-blue-600"/>
+                                 </label>
+                             </div>
+                             <div className="flex justify-between text-sm text-slate-500"><span>Subtotal</span><span>{subtotalMurni.toLocaleString()}</span></div>
+                             {nilaiDiskon > 0 && <div className="flex justify-between text-sm text-red-500"><span>Diskon</span><span>-{nilaiDiskon.toLocaleString()}</span></div>}
+                             {ppnAktif && <div className="flex justify-between text-sm text-slate-500"><span>PPN</span><span>+{nilaiPPN.toLocaleString()}</span></div>}
+                         </div>
+
                          <div className="flex justify-between text-xl font-black text-slate-800 pt-2 border-t border-slate-200 mt-2"><span>Total</span><span>Rp {totalAkhir.toLocaleString()}</span></div>
                          
-                         {/* METODE PEMBAYARAN */}
                          <div className="grid grid-cols-3 gap-2">
                             <button onClick={() => setMetodePembayaran('Cash')} className={`py-2 rounded-xl text-xs font-bold border ${metodePembayaran === 'Cash' ? 'bg-green-100 border-green-300 text-green-700' : 'bg-white'}`}>Tunai</button>
                             <button onClick={() => setMetodePembayaran('QRIS')} className={`py-2 rounded-xl text-xs font-bold border ${metodePembayaran === 'QRIS' ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-white'}`}>QRIS</button>
                             <button onClick={() => setMetodePembayaran('Kasbon')} className={`py-2 rounded-xl text-xs font-bold border ${metodePembayaran === 'Kasbon' ? 'bg-orange-100 border-orange-300 text-orange-700' : 'bg-white'}`}>Kasbon</button>
                          </div>
-
-                         {/* INPUT TUNAI */}
                          {metodePembayaran === 'Cash' && (
                              <div className="bg-white p-3 rounded-xl border-2 border-green-100 flex items-center gap-2">
                                 <Banknote className="text-green-500" size={20}/><input type="text" className="w-full font-black text-lg outline-none" placeholder="Input Uang..." value={inputBayar} onChange={(e) => { const val = e.target.value.replace(/\D/g, ''); setInputBayar(val ? "Rp " + parseInt(val).toLocaleString() : ""); }} />
                              </div>
                          )}
-
-                         {/* INPUT KASBON LENGKAP */}
                          {metodePembayaran === 'Kasbon' && (
                             <div className="space-y-2 animate-fade-in">
-                                <div className="bg-white p-2 rounded-xl border border-orange-200 flex items-center gap-2">
-                                    <UserCircle className="text-orange-500" size={18}/>
-                                    <input type="text" className="w-full font-bold text-sm outline-none" placeholder="Nama Pelanggan" value={namaPelangganKasbon} onChange={(e) => setNamaPelangganKasbon(e.target.value)} />
-                                </div>
-                                <div className="bg-white p-2 rounded-xl border border-orange-200 flex items-center gap-2">
-                                    <Phone className="text-orange-500" size={18}/>
-                                    <input type="tel" className="w-full font-bold text-sm outline-none" placeholder="Nomor WA (08xx)" value={nomorHPKasbon} onChange={(e) => setNomorHPKasbon(e.target.value)} />
-                                </div>
-                                <div className="bg-white p-2 rounded-xl border border-orange-200 flex items-center gap-2">
-                                    <Calendar className="text-orange-500" size={18}/>
-                                    <div className="flex-1">
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase">Jatuh Tempo</p>
-                                        <input type="date" className="w-full font-bold text-sm outline-none" value={jatuhTempoKasbon} onChange={(e) => setJatuhTempoKasbon(e.target.value)} />
-                                    </div>
-                                </div>
+                                <div className="bg-white p-2 rounded-xl border border-orange-200 flex items-center gap-2"><UserCircle className="text-orange-500" size={18}/><input type="text" className="w-full font-bold text-sm outline-none" placeholder="Nama Pelanggan" value={namaPelangganKasbon} onChange={(e) => setNamaPelangganKasbon(e.target.value)} /></div>
+                                <div className="bg-white p-2 rounded-xl border border-orange-200 flex items-center gap-2"><Phone className="text-orange-500" size={18}/><input type="tel" className="w-full font-bold text-sm outline-none" placeholder="Nomor WA (08xx)" value={nomorHPKasbon} onChange={(e) => setNomorHPKasbon(e.target.value)} /></div>
+                                <div className="bg-white p-2 rounded-xl border border-orange-200 flex items-center gap-2"><Calendar className="text-orange-500" size={18}/><div className="flex-1"><p className="text-[10px] text-slate-400 font-bold uppercase">Jatuh Tempo</p><input type="date" className="w-full font-bold text-sm outline-none" value={jatuhTempoKasbon} onChange={(e) => setJatuhTempoKasbon(e.target.value)} /></div></div>
                             </div>
                          )}
-
                          <button onClick={handleBayarClick} disabled={keranjang.length === 0} className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold text-lg shadow-lg flex justify-center items-center gap-2">
                             {metodePembayaran === 'Kasbon' ? 'Simpan Hutang' : 'Bayar Sekarang'} <ArrowRight size={20}/>
                          </button>
@@ -511,7 +540,7 @@ const App = () => {
             </div>
           )}
 
-          {/* --- DATA KASBON (Updated) --- */}
+          {/* --- DATA KASBON --- */}
           {activeTab === 'kasbon' && currentUser?.role === 'admin' && (
              <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center">
@@ -564,15 +593,15 @@ const App = () => {
                                     <td className="p-6 flex justify-center gap-2">
                                         {k.status === 'Belum Lunas' && (
                                             <>
-                                                <button onClick={() => handleTagihHutangWA(k)} className="bg-green-100 hover:bg-green-200 text-green-700 p-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1" title="Kirim Tagihan WA">
-                                                    <MessageCircle size={16}/> Tagih WA
-                                                </button>
-                                                <button onClick={() => setShowLunasConfirm({ id: k.id, nama: k.namaPelanggan })} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-md transition-all">
-                                                    Lunasi
-                                                </button>
+                                                <button onClick={() => handleTagihHutangWA(k)} className="bg-green-100 hover:bg-green-200 text-green-700 p-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1" title="Kirim Tagihan WA"><MessageCircle size={16}/> Tagih WA</button>
+                                                <button onClick={() => setShowLunasConfirm({ id: k.id, nama: k.namaPelanggan })} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-md transition-all">Lunasi</button>
                                             </>
                                         )}
-                                        {k.status === 'Lunas' && <span className="text-slate-300 text-xs italic">Selesai</span>}
+                                        {k.status === 'Lunas' && (
+                                            <button onClick={() => setShowDeleteKasbonConfirm(k.id)} className="bg-red-100 hover:bg-red-200 text-red-600 p-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1" title="Hapus Data">
+                                                <Trash2 size={16}/> Hapus
+                                            </button>
+                                        )}
                                     </td>
                                 </tr>
                             )})}
@@ -582,7 +611,7 @@ const App = () => {
              </div>
           )}
 
-          {/* --- INVENTORY & HISTORY & USERS (Same as before) --- */}
+          {/* --- INVENTORY & HISTORY & USERS --- */}
           {activeTab === 'inventory' && currentUser?.role === 'admin' && (
              <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center">
@@ -616,11 +645,16 @@ const App = () => {
                     <table className="w-full text-left text-sm text-slate-600">
                         <thead className="bg-slate-50 text-slate-400 uppercase font-bold text-xs"><tr><th className="p-4 pl-6">ID & Tgl</th><th className="p-4">Total</th><th className="p-4 text-center">Aksi</th></tr></thead>
                         <tbody>
-                            {riwayat.map((trx) => (
+                            {riwayat.length === 0 ? (
+                                <tr><td colSpan={3} className="p-8 text-center text-slate-400">Belum ada riwayat transaksi.</td></tr>
+                            ) : riwayat.map((trx) => (
                                 <tr key={trx.id} className="border-b border-slate-50 hover:bg-slate-50">
                                     <td className="p-4 pl-6"><div className="font-mono text-xs font-bold text-slate-500">{trx.id}</div><div className="text-[10px] text-slate-400">{trx.tanggal}</div></td>
                                     <td className="p-4 font-black text-slate-700">Rp {trx.total.toLocaleString()}</td>
-                                    <td className="p-4 flex justify-center gap-2"><button onClick={() => handleKirimWA(trx)} className="p-2 bg-green-100 text-green-600 rounded-lg"><MessageCircle size={16}/></button></td>
+                                    <td className="p-4 flex justify-center gap-2">
+                                        <button onClick={() => handlePrintStruk(trx)} className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200" title="Print Struk"><Printer size={16}/></button>
+                                        <button onClick={() => handleKirimWA(trx)} className="p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200" title="Kirim WA"><MessageCircle size={16}/></button>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -645,7 +679,6 @@ const App = () => {
                 </div>
              </div>
           )}
-
         </div>
       </main>
 
@@ -686,6 +719,21 @@ const App = () => {
               </div>
           </div>
       )}
+
+      {/* --- CONFIRM DELETE KASBON --- */}
+      {showDeleteKasbonConfirm && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <div className="bg-white p-6 rounded-2xl shadow-xl max-w-sm w-full text-center">
+                  <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4"><Trash2 size={32}/></div>
+                  <h3 className="font-bold text-lg mb-2">Hapus Data Kasbon?</h3>
+                  <p className="text-slate-500 text-sm mb-6">Data yang dihapus tidak bisa dikembalikan.</p>
+                  <div className="flex gap-3">
+                      <button onClick={() => setShowDeleteKasbonConfirm(null)} className="flex-1 bg-slate-100 py-3 rounded-xl font-bold">Batal</button>
+                      <button onClick={handleDeleteKasbon} className="flex-1 bg-red-600 text-white py-3 rounded-xl font-bold">Hapus</button>
+                  </div>
+              </div>
+          </div>
+      )}
       
       {showSuccess && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-50 p-4">
@@ -693,15 +741,15 @@ const App = () => {
                 <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4"><CheckCircle2 size={40}/></div>
                 <h2 className="text-2xl font-black mb-2">Transaksi Sukses!</h2>
                 <p className="text-slate-500 text-sm mb-6">{lastTrx?.metodePembayaran === 'Kasbon' ? 'Data hutang telah tersimpan.' : 'Terima kasih telah berbelanja.'}</p>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-2">
                     <button onClick={() => setShowSuccess(false)} className="py-3 rounded-xl font-bold text-slate-600 bg-slate-100">Tutup</button>
-                    <button onClick={() => lastTrx && handleKirimWA(lastTrx)} className="py-3 rounded-xl font-bold text-white bg-green-600 flex items-center justify-center gap-2"><ReceiptText size={18}/> Struk</button>
+                    <button onClick={() => lastTrx && handlePrintStruk(lastTrx)} className="py-3 rounded-xl font-bold text-white bg-slate-800 flex items-center justify-center gap-2"><Printer size={18}/> Print</button>
+                    <button onClick={() => lastTrx && handleKirimWA(lastTrx)} className="py-3 rounded-xl font-bold text-white bg-green-600 flex items-center justify-center gap-2"><MessageCircle size={18}/> WA</button>
                 </div>
             </div>
         </div>
       )}
 
-      {/* Modal Add Produk & User disederhanakan visualnya agar muat */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-sm w-full space-y-3">

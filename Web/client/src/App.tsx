@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { 
   LayoutGrid, ShoppingCart, History, Search, LayoutDashboard,
-  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, UserCircle, KeyRound, Settings, Users, UserPlus, XCircle, UserCheck, AlertTriangle, Minus, Plus, Download, AlertOctagon, MessageCircle, FileText, Tag
+  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, UserCircle, KeyRound, Settings, Users, UserPlus, XCircle, UserCheck, AlertTriangle, Minus, Plus, Download, AlertOctagon, MessageCircle, FileText, Tag, CreditCard, Banknote
 } from 'lucide-react';
 
 // --- KONFIGURASI TOKO ---
@@ -26,7 +26,7 @@ const DEFAULT_USERS = [
   { id: 2, username: 'kasir', password: '123', role: 'kasir', nama: 'Kasir Utama' },
 ];
 
-// --- Interfaces (UPDATED: Added diskon) ---
+// --- Interfaces (UPDATED: Added metodePembayaran) ---
 interface Produk { id: number; nama: string; kategori: string; stok: number; hargaEcer: number; barcode: string; }
 interface ItemKeranjang extends Produk { qty: number; subtotal: number; }
 interface HistoryTransaksi { 
@@ -36,9 +36,10 @@ interface HistoryTransaksi {
     waktu: string; 
     items: ItemKeranjang[]; 
     subtotal: number; 
-    diskon: number;       // BARU: Simpan nilai diskon
+    diskon: number;
     ppn: number;      
-    total: number;    
+    total: number;
+    metodePembayaran: string; // BARU: 'Cash' atau 'QRIS'
 }
 interface UserSession { id: number; username: string; role: 'admin' | 'kasir'; nama: string; }
 interface UserData { id: number; username: string; password: string; role: string; nama: string; }
@@ -89,9 +90,10 @@ const App = () => {
   const [selectedCategory, setSelectedCategory] = useState("Semua");
   const [barcodeInput, setBarcodeInput] = useState("");
   
-  // --- STATE PPN & DISKON (BARU) ---
+  // --- STATE PPN, DISKON, & METODE BAYAR (BARU) ---
   const [ppnAktif, setPpnAktif] = useState(false);
-  const [inputDiskon, setInputDiskon] = useState(""); // Input string agar bisa kosong
+  const [inputDiskon, setInputDiskon] = useState(""); 
+  const [metodePembayaran, setMetodePembayaran] = useState<string>('Cash'); // Default Cash
 
   // UI States
   const [showEmptyWarning, setShowEmptyWarning] = useState(false);
@@ -110,24 +112,20 @@ const App = () => {
 
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
-  // --- CALCULATIONS (UPDATED FOR DISKON) ---
+  // --- CALCULATIONS ---
   const subtotalMurni = useMemo(() => keranjang.reduce((a, b) => a + b.subtotal, 0), [keranjang]);
   
-  // 1. Hitung Diskon
   const nilaiDiskon = useMemo(() => {
     const val = parseInt(inputDiskon.replace(/\D/g, '')) || 0;
-    return val > subtotalMurni ? subtotalMurni : val; // Diskon tidak boleh melebihi subtotal
+    return val > subtotalMurni ? subtotalMurni : val; 
   }, [inputDiskon, subtotalMurni]);
 
-  // 2. Subtotal setelah diskon (Dasar Pengenaan Pajak)
   const subtotalSetelahDiskon = subtotalMurni - nilaiDiskon;
 
-  // 3. Hitung PPN dari harga setelah diskon
   const nilaiPPN = useMemo(() => {
     return ppnAktif ? Math.round(subtotalSetelahDiskon * 0.11) : 0;
   }, [ppnAktif, subtotalSetelahDiskon]);
 
-  // 4. Total Akhir
   const totalAkhir = subtotalSetelahDiskon + nilaiPPN;
 
   const uniqueCategories = useMemo(() => {
@@ -177,16 +175,18 @@ const App = () => {
     setCurrentUser(null);
     setKeranjang([]); 
     setPpnAktif(false); 
-    setInputDiskon(""); // Reset diskon
+    setInputDiskon(""); 
+    setMetodePembayaran('Cash');
     setShowPassSuccess(false);
   };
 
-  // --- LOGIKA KIRIM WHATSAPP (UPDATED WITH DISKON) ---
+  // --- LOGIKA KIRIM WHATSAPP (UPDATED WITH METODE BAYAR) ---
   const handleKirimWA = (trx: HistoryTransaksi) => {
     let pesan = `*STRUK BELANJA - ${NAMA_TOKO}*\n`;
     pesan += `No: ${trx.id}\n`;
     pesan += `Tanggal: ${trx.tanggal} ${trx.waktu}\n`;
     pesan += `Kasir: ${trx.kasir}\n`;
+    pesan += `Metode Bayar: ${trx.metodePembayaran}\n`; // Info Metode Bayar
     pesan += `--------------------------------\n`;
     trx.items.forEach(item => {
         pesan += `${item.nama}\n`;
@@ -211,7 +211,7 @@ const App = () => {
     window.open(`https://wa.me/?text=${encodedPesan}`, '_blank');
   };
 
-  // --- LOGIKA USER ---
+  // --- LOGIKA USER & EXCEL ---
   const handleAddUser = () => {
     if (!newUser.username || !newUser.password || !newUser.nama) return alert("Semua kolom wajib diisi!");
     if (dbUsers.some(u => u.username === newUser.username)) return alert("Username sudah dipakai!");
@@ -236,7 +236,6 @@ const App = () => {
     }
   };
 
-  // --- LOGIKA GANTI PASSWORD ---
   const handleChangePassword = () => {
     if (!currentUser) return;
     const { oldPass, newPass, confirmPass } = passForm;
@@ -256,7 +255,6 @@ const App = () => {
     setShowPassSuccess(true);
   };
 
-  // --- LOGIKA EXPORT EXCEL (UPDATED WITH DISKON) ---
   const handleExportExcel = () => {
     if (riwayat.length === 0) return alert("Belum ada data transaksi untuk diexport.");
     const dataUntukExcel = riwayat.map(trx => ({
@@ -264,14 +262,15 @@ const App = () => {
         "Tanggal": trx.tanggal,
         "Waktu": trx.waktu,
         "Kasir": trx.kasir,
+        "Metode Bayar": trx.metodePembayaran, // Kolom Baru
         "Detail Barang": trx.items.map(item => `${item.nama} (${item.qty})`).join(", "),
         "Subtotal": trx.subtotal,
-        "Diskon": trx.diskon, // Tambahkan kolom diskon
+        "Diskon": trx.diskon,
         "PPN (11%)": trx.ppn,
         "Total Bayar": trx.total
     }));
     const worksheet = XLSX.utils.json_to_sheet(dataUntukExcel);
-    const wscols = [{wch: 20}, {wch: 15}, {wch: 10}, {wch: 15}, {wch: 50}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 15}];
+    const wscols = [{wch: 20}, {wch: 15}, {wch: 10}, {wch: 15}, {wch: 15}, {wch: 50}, {wch: 15}, {wch: 15}, {wch: 15}, {wch: 15}];
     worksheet['!cols'] = wscols;
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Laporan Penjualan");
@@ -322,9 +321,10 @@ const App = () => {
             waktu: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
             items: [...keranjang],
             subtotal: subtotalMurni,
-            diskon: nilaiDiskon, // Simpan Diskon
+            diskon: nilaiDiskon,
             ppn: nilaiPPN,
-            total: totalAkhir
+            total: totalAkhir,
+            metodePembayaran: metodePembayaran // Simpan Metode Bayar
         };
         setRiwayat(prev => [trx, ...prev]); 
         setProdukList(prevList => prevList.map(p => { 
@@ -334,7 +334,8 @@ const App = () => {
         setLastTrx(trx);
         setKeranjang([]);
         setPpnAktif(false); 
-        setInputDiskon(""); // Reset Diskon
+        setInputDiskon(""); 
+        setMetodePembayaran('Cash'); // Reset ke Cash
         setIsLoading(false);
         setShowSuccess(true);
     }, 800);
@@ -408,7 +409,7 @@ const App = () => {
         @media print { body * { visibility: hidden; } #struk-print, #struk-print * { visibility: visible; } #struk-print { display: block !important; position: absolute; left: 0; top: 0; width: 100%; } @page { margin: 0; size: auto; } }
       `}</style>
 
-      {/* STRUK PRINT (UPDATED WITH DISKON) */}
+      {/* STRUK PRINT (UPDATED) */}
       <div id="struk-print" className="hidden font-mono text-sm max-w-[80mm] mx-auto bg-white p-4">
         {lastTrx && <div className="text-center">
             <img src={LOGO_URL} alt="Logo" className="w-16 h-16 mx-auto mb-2 object-contain grayscale" />
@@ -416,15 +417,13 @@ const App = () => {
             <p className="text-xs">{lastTrx.tanggal} {lastTrx.waktu}</p>
             <p className="text-xs">No: {lastTrx.id}</p>
             <p className="text-xs">Kasir: {lastTrx.kasir}</p>
+            <p className="text-xs font-bold mt-1">Metode: {lastTrx.metodePembayaran}</p> {/* METODE BAYAR DI STRUK */}
             <hr className="border-dashed border-black my-2"/>
             <div className="text-left">{lastTrx.items.map(i => (<div key={i.id} className="flex justify-between"><span>{i.nama} <span className="text-[10px]"><br/>{i.qty} x {i.hargaEcer.toLocaleString()}</span></span><span>{i.subtotal.toLocaleString()}</span></div>))}</div>
             <hr className="border-dashed border-black my-2"/>
-            
-            {/* Rincian dengan Diskon */}
             <div className="flex justify-between text-xs"><span>Subtotal</span><span>{lastTrx.subtotal.toLocaleString()}</span></div>
             {lastTrx.diskon > 0 && <div className="flex justify-between text-xs"><span>Diskon</span><span>- {lastTrx.diskon.toLocaleString()}</span></div>}
             {lastTrx.ppn > 0 && <div className="flex justify-between text-xs"><span>PPN (11%)</span><span>+{lastTrx.ppn.toLocaleString()}</span></div>}
-            
             <div className="flex justify-between font-bold text-lg border-t border-black mt-1 pt-1"><span>TOTAL</span><span>Rp {lastTrx.total.toLocaleString()}</span></div>
             <p className="text-center text-xs mt-4">Terima Kasih</p>
         </div>}
@@ -545,11 +544,11 @@ const App = () => {
             </div>
           )}
 
-          {/* HISTORY TAB (UPDATED UI FOR DISKON) */}
+          {/* HISTORY TAB */}
           {activeTab === 'history' && (
             <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center"><h3 className="font-bold text-slate-700">Riwayat Transaksi</h3><div className="flex gap-2"><button onClick={handleExportExcel} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-xl font-bold text-xs shadow-lg shadow-green-200 flex items-center gap-2"><Download size={16}/> Export Excel</button>{currentUser.role === 'admin' && (<button onClick={hapusSemuaRiwayat} className="bg-red-100 hover:bg-red-200 text-red-600 px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2"><Trash2 size={16}/> Reset</button>)}</div></div>
-                <div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-600"><thead className="bg-slate-50 text-slate-400 uppercase font-bold text-xs"><tr><th className="p-6">ID</th><th className="p-6">Waktu</th><th className="p-6">Kasir</th><th className="p-6">Item</th><th className="p-6 text-right">Subtotal</th><th className="p-6 text-right">Diskon</th><th className="p-6 text-right">PPN</th><th className="p-6 text-right">Total</th><th className="p-6 text-center">Aksi</th></tr></thead><tbody>{riwayat.map(t => (<tr key={t.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors"><td className="p-6 font-mono text-xs font-bold text-slate-500">{t.id}</td><td className="p-6"><div className="font-bold text-slate-700">{t.tanggal}</div><div className="text-xs text-slate-400">{t.waktu}</div></td><td className="p-6">{t.kasir}</td><td className="p-6 text-xs max-w-[200px] leading-relaxed">{t.items.map(i => `${i.nama} (${i.qty})`).join(', ')}</td><td className="p-6 text-right text-slate-400">Rp {t.subtotal.toLocaleString()}</td><td className="p-6 text-right text-red-400 font-bold">{t.diskon > 0 ? `- Rp ${t.diskon.toLocaleString()}` : '-'}</td><td className="p-6 text-right text-slate-400">{t.ppn > 0 ? `+ Rp ${t.ppn.toLocaleString()}` : '-'}</td><td className="p-6 text-right font-black text-slate-800 text-base">Rp {t.total.toLocaleString()}</td><td className="p-6 flex justify-center gap-2"><button onClick={() => { setLastTrx(t); setTimeout(() => window.print(), 100); }} className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg" title="Print Ulang"><Printer size={16}/></button><button onClick={() => handleKirimWA(t)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg" title="Kirim WA"><MessageCircle size={16}/></button>{currentUser.role === 'admin' && (<button onClick={() => clickHapusSatuRiwayat(t.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button>)}</td></tr>))}</tbody></table></div>
+                <div className="overflow-x-auto"><table className="w-full text-left text-sm text-slate-600"><thead className="bg-slate-50 text-slate-400 uppercase font-bold text-xs"><tr><th className="p-6">ID</th><th className="p-6">Waktu</th><th className="p-6">Metode</th><th className="p-6">Item</th><th className="p-6 text-right">Subtotal</th><th className="p-6 text-right">Diskon</th><th className="p-6 text-right">PPN</th><th className="p-6 text-right">Total</th><th className="p-6 text-center">Aksi</th></tr></thead><tbody>{riwayat.map(t => (<tr key={t.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors"><td className="p-6 font-mono text-xs font-bold text-slate-500">{t.id}</td><td className="p-6"><div className="font-bold text-slate-700">{t.tanggal}</div><div className="text-xs text-slate-400">{t.waktu}</div></td><td className="p-6"><span className={`px-2 py-1 rounded text-xs font-bold ${t.metodePembayaran === 'QRIS' ? 'bg-blue-100 text-blue-600' : 'bg-green-100 text-green-600'}`}>{t.metodePembayaran}</span></td><td className="p-6 text-xs max-w-[200px] leading-relaxed">{t.items.map(i => `${i.nama} (${i.qty})`).join(', ')}</td><td className="p-6 text-right text-slate-400">Rp {t.subtotal.toLocaleString()}</td><td className="p-6 text-right text-red-400 font-bold">{t.diskon > 0 ? `- Rp ${t.diskon.toLocaleString()}` : '-'}</td><td className="p-6 text-right text-slate-400">{t.ppn > 0 ? `+ Rp ${t.ppn.toLocaleString()}` : '-'}</td><td className="p-6 text-right font-black text-slate-800 text-base">Rp {t.total.toLocaleString()}</td><td className="p-6 flex justify-center gap-2"><button onClick={() => { setLastTrx(t); setTimeout(() => window.print(), 100); }} className="p-2 text-slate-600 hover:bg-slate-100 rounded-lg" title="Print Ulang"><Printer size={16}/></button><button onClick={() => handleKirimWA(t)} className="p-2 text-green-600 hover:bg-green-50 rounded-lg" title="Kirim WA"><MessageCircle size={16}/></button>{currentUser.role === 'admin' && (<button onClick={() => clickHapusSatuRiwayat(t.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg"><Trash2 size={16}/></button>)}</td></tr>))}</tbody></table></div>
             </div>
           )}
 
@@ -617,6 +616,16 @@ const App = () => {
                             <span className="font-bold">+ Rp {nilaiPPN.toLocaleString()}</span>
                         </div>
                     </div>
+
+                    {/* PILIHAN METODE PEMBAYARAN (BARU) */}
+                    <div className="grid grid-cols-2 gap-2 pt-2">
+                        <button onClick={() => setMetodePembayaran('Cash')} className={`py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${metodePembayaran === 'Cash' ? 'bg-green-100 text-green-700 border-2 border-green-500' : 'bg-white border border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+                            <Banknote size={16}/> Cash
+                        </button>
+                        <button onClick={() => setMetodePembayaran('QRIS')} className={`py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${metodePembayaran === 'QRIS' ? 'bg-blue-100 text-blue-700 border-2 border-blue-500' : 'bg-white border border-slate-200 text-slate-500 hover:border-slate-300'}`}>
+                            <CreditCard size={16}/> QRIS/TF
+                        </button>
+                    </div>
                     
                     <div className="border-t border-dashed border-slate-300 pt-3">
                         <div className="flex justify-between items-end mb-4"><span className="font-bold text-slate-800">Total Akhir</span><span className="font-black text-2xl text-blue-600">Rp {totalAkhir.toLocaleString()}</span></div>
@@ -665,8 +674,7 @@ const App = () => {
         </div>
       )}
 
-      {/* MODAL LAINNYA (Password, User, Delete Confirmation - Sama seperti sebelumnya, disingkat untuk keterbacaan) */}
-      {/* ... Kode modal lain tetap sama ... */}
+      {/* MODAL LAINNYA */}
       {showAddUserModal && (<div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"><div className="bg-white w-full max-w-sm rounded-3xl p-8 shadow-2xl animate-pop-in"><h3 className="text-xl font-black text-slate-800 mb-4">Tambah User Baru</h3><div className="space-y-3"><input type="text" placeholder="Nama Lengkap" className="w-full bg-slate-50 border p-3 rounded-xl font-bold outline-none" value={newUser.nama} onChange={e=>setNewUser({...newUser, nama: e.target.value})}/><input type="text" placeholder="Username" className="w-full bg-slate-50 border p-3 rounded-xl font-bold outline-none" value={newUser.username} onChange={e=>setNewUser({...newUser, username: e.target.value})}/><input type="password" placeholder="Password" className="w-full bg-slate-50 border p-3 rounded-xl font-bold outline-none" value={newUser.password} onChange={e=>setNewUser({...newUser, password: e.target.value})}/><select className="w-full bg-slate-50 border p-3 rounded-xl font-bold outline-none" value={newUser.role} onChange={e=>setNewUser({...newUser, role: e.target.value})}><option value="kasir">Kasir</option><option value="admin">Admin</option></select></div><div className="flex gap-3 mt-6"><button onClick={()=>setShowAddUserModal(false)} className="flex-1 bg-slate-100 py-3 rounded-xl font-bold">Batal</button><button onClick={handleAddUser} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold">Simpan</button></div></div></div>)}
       {showPasswordModal && (<div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"><div className="bg-white w-full max-w-sm rounded-3xl p-8 shadow-2xl animate-pop-in"><h3 className="text-xl font-black text-slate-800 mb-4">Ganti Password</h3><div className="space-y-3"><input type="password" placeholder="Password Lama" className="w-full bg-slate-50 border p-3 rounded-xl font-bold outline-none" value={passForm.oldPass} onChange={e=>setPassForm({...passForm, oldPass: e.target.value})}/><input type="password" placeholder="Password Baru" className="w-full bg-slate-50 border p-3 rounded-xl font-bold outline-none" value={passForm.newPass} onChange={e=>setPassForm({...passForm, newPass: e.target.value})}/><input type="password" placeholder="Konfirmasi Password" className="w-full bg-slate-50 border p-3 rounded-xl font-bold outline-none" value={passForm.confirmPass} onChange={e=>setPassForm({...passForm, confirmPass: e.target.value})}/>{passError && <p className="text-red-500 text-xs font-bold">{passError}</p>}</div><div className="flex gap-3 mt-6"><button onClick={()=>setShowPasswordModal(false)} className="flex-1 bg-slate-100 py-3 rounded-xl font-bold">Batal</button><button onClick={handleChangePassword} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold">Simpan</button></div></div></div>)}
       {showEmptyWarning && (<div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50"><div className="bg-white p-6 rounded-2xl shadow-xl max-w-xs text-center animate-pop-in"><AlertTriangle size={48} className="mx-auto text-orange-500 mb-4"/><h3 className="font-bold text-lg mb-2">Keranjang Kosong!</h3><p className="text-slate-500 text-sm mb-6">Silakan pilih produk terlebih dahulu.</p><button onClick={() => setShowEmptyWarning(false)} className="bg-slate-800 text-white px-6 py-2 rounded-xl font-bold w-full">OK</button></div></div>)}

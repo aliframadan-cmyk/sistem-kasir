@@ -201,6 +201,7 @@ const App = () => {
           <style>
             body { font-family: 'Courier New', monospace; padding: 10px; width: 58mm; margin: 0 auto; color: #000; }
             .header { text-align: center; margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 5px; }
+            .logo-img { width: 50px; height: 50px; object-fit: contain; margin-bottom: 5px; filter: grayscale(100%); } 
             .items { margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 5px; }
             .totals { text-align: right; }
             .footer { text-align: center; margin-top: 15px; font-size: 10px; }
@@ -210,6 +211,7 @@ const App = () => {
         </head>
         <body>
           <div class="header">
+            <img src="${LOGO_URL}" class="logo-img" alt="Logo" />
             <h2>${NAMA_TOKO}</h2>
             <p>${ALAMAT_TOKO}</p>
             <p>${TELP_TOKO}</p>
@@ -241,12 +243,49 @@ const App = () => {
     printWindow.document.close();
   };
 
+  // --- FORMAT KIRIM WA DIPERBAIKI ---
   const handleKirimWA = (trx: HistoryTransaksi) => {
-    let pesan = `*STRUK BELANJA - ${NAMA_TOKO}*\nNo: ${trx.id}\nTanggal: ${trx.tanggal}\n`;
-    trx.items.forEach(item => { pesan += `${item.nama} (${item.qty}x) : Rp ${item.subtotal.toLocaleString()}\n`; });
+    let pesan = `*STRUK BELANJA - ${NAMA_TOKO}*\n`;
+    pesan += `No: ${trx.id}\n`;
+    pesan += `Tanggal: ${trx.tanggal} ${trx.waktu}\n`;
+    pesan += `Kasir: ${trx.kasir}\n`;
+    
+    // Tampilkan nama pelanggan jika ada (prioritas dari catatan/kasbon)
+    const namaPelanggan = trx.catatan ? trx.catatan : "Umum";
+    pesan += `Pelanggan: ${namaPelanggan}\n`;
+    
+    pesan += `--------------------------------\n`;
+
+    // Loop Item dengan format 2 baris agar rapi
+    trx.items.forEach(item => {
+        pesan += `${item.nama}\n`;
+        // Format: 4 x 14,500 = 58,000
+        pesan += `${item.qty} x ${item.hargaEcer.toLocaleString()} = ${item.subtotal.toLocaleString()}\n`;
+    });
+
+    pesan += `--------------------------------\n`;
+
+    // Total Section
+    pesan += `Subtotal: Rp ${trx.subtotal.toLocaleString()}\n`;
+    
     if(trx.diskon > 0) pesan += `Diskon: - Rp ${trx.diskon.toLocaleString()}\n`;
     if(trx.ppn > 0) pesan += `PPN (11%): Rp ${trx.ppn.toLocaleString()}\n`;
-    pesan += `*Total: Rp ${trx.total.toLocaleString()}*`;
+    
+    pesan += `--------------------------------\n`;
+    pesan += `*Total: Rp ${trx.total.toLocaleString()}*\n`;
+    
+    // Status Pembayaran
+    if (trx.metodePembayaran === 'Kasbon') {
+        pesan += `Status: HUTANG / KASBON\n`;
+    } else if (trx.metodePembayaran === 'QRIS') {
+        pesan += `Status: LUNAS (QRIS)\n`;
+    } else {
+        pesan += `Status: LUNAS (TUNAI)\n`;
+    }
+
+    pesan += `--------------------------------\n`;
+    pesan += `Terima Kasih! 🙏`;
+
     window.open(`https://wa.me/?text=${encodeURIComponent(pesan)}`, '_blank');
   };
 
@@ -314,12 +353,16 @@ const App = () => {
     setTimeout(() => {
         const now = new Date();
         const trxId = `INV-${Date.now()}`;
+        
+        // Simpan nama pelanggan di field 'catatan' agar bisa dipakai di WA
+        const namaPelanggan = metodePembayaran === 'Kasbon' ? namaPelangganKasbon : "";
+
         const trx: HistoryTransaksi = { 
             id: trxId, kasir: currentUser?.nama || 'Unknown', 
             tanggal: now.toLocaleDateString('id-ID'), waktu: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
             items: [...keranjang], subtotal: subtotalMurni, diskon: nilaiDiskon, ppn: nilaiPPN, total: totalAkhir,
             bayar: nilaiBayar, kembali: nilaiKembalian, metodePembayaran,
-            catatan: metodePembayaran === 'Kasbon' ? namaPelangganKasbon : ''
+            catatan: namaPelanggan // Simpan nama di sini
         };
 
         if (metodePembayaran === 'Kasbon') {
@@ -359,6 +402,15 @@ const App = () => {
     if (editId) { setProdukList(produkList.map(p => p.id === editId ? { ...p, ...productData } : p)); } 
     else { const newId = produkList.length > 0 ? Math.max(...produkList.map(p => p.id)) + 1 : 1; setProdukList([...produkList, { id: newId, ...productData }]); }
     setShowAddModal(false); setShowSaveSuccess(true);
+  };
+
+  // Helper Warna Tombol Bayar
+  const getButtonBayarClass = () => {
+      if (keranjang.length === 0) return 'bg-slate-300 cursor-not-allowed';
+      if (metodePembayaran === 'QRIS') return 'bg-blue-600 hover:bg-blue-700';
+      if (metodePembayaran === 'Kasbon') return 'bg-slate-900 hover:bg-slate-800';
+      if (nilaiBayar < totalAkhir) return 'bg-red-600 hover:bg-red-700 animate-pulse'; 
+      return 'bg-green-600 hover:bg-green-700';
   };
 
   const stats = useMemo(() => {
@@ -499,7 +551,6 @@ const App = () => {
                         ))}
                     </div>
                     <div className="p-5 bg-slate-50 border-t border-slate-200 rounded-b-3xl space-y-3">
-                         {/* DISKON DAN PPN DIKEMBALIKAN DISINI */}
                          <div className="space-y-2">
                              <div className="flex justify-between items-center">
                                  <input type="text" placeholder="Diskon (Rp)" className="bg-white border border-slate-200 rounded-lg px-3 py-1 text-xs font-bold w-32 outline-none" value={inputDiskon} onChange={(e) => { const val = e.target.value.replace(/\D/g, ''); setInputDiskon(val ? "Rp " + parseInt(val).toLocaleString() : ""); }} />
@@ -532,7 +583,8 @@ const App = () => {
                                 <div className="bg-white p-2 rounded-xl border border-orange-200 flex items-center gap-2"><Calendar className="text-orange-500" size={18}/><div className="flex-1"><p className="text-[10px] text-slate-400 font-bold uppercase">Jatuh Tempo</p><input type="date" className="w-full font-bold text-sm outline-none" value={jatuhTempoKasbon} onChange={(e) => setJatuhTempoKasbon(e.target.value)} /></div></div>
                             </div>
                          )}
-                         <button onClick={handleBayarClick} disabled={keranjang.length === 0} className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold text-lg shadow-lg flex justify-center items-center gap-2">
+                         
+                         <button onClick={handleBayarClick} disabled={keranjang.length === 0} className={`w-full text-white py-4 rounded-xl font-bold text-lg shadow-lg flex justify-center items-center gap-2 transition-all ${getButtonBayarClass()}`}>
                             {metodePembayaran === 'Kasbon' ? 'Simpan Hutang' : 'Bayar Sekarang'} <ArrowRight size={20}/>
                          </button>
                     </div>

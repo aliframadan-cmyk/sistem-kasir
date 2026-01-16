@@ -1,39 +1,51 @@
-/* Pastikan container utama mengambil seluruh tinggi layar */
-#root {
-  height: 100vh;
-  margin: 0;
-  padding: 0;
+/* Custom Scrollbar untuk Keranjang */
+#cart-items::-webkit-scrollbar {
+    width: 5px;
 }
 
-/* Reset dasar untuk memastikan padding dan border tidak merusak layout */
-* {
-  box-sizing: border-box;
+#cart-items::-webkit-scrollbar-thumb {
+    background: #e2e8f0;
+    border-radius: 10px;
 }
 
-/* Kustomisasi scrollbar agar lebih ramping dan modern (opsional) */
-::-webkit-scrollbar {
-  width: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: #f1f5f9;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 10px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
-}
-
-/* Animasi halus saat berpindah halaman */
-.page-transition {
-  animation: fadeIn 0.3s ease-in-out;
+/* Animasi saat item masuk keranjang */
+.animate-fade-in {
+    animation: fadeIn 0.3s ease-in-out;
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(5px); }
-  to { opacity: 1; transform: translateY(0); }
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Gaya khusus untuk baris tabel agar mirip gambar */
+.product-row:hover {
+    background-color: #f8fafc;
+    cursor: pointer;
+}
+
+.badge-makanan {
+    background-color: #f1f5f9;
+    color: #64748b;
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.stok-high {
+    color: #22c55e; /* Hijau seperti di gambar */
+    font-weight: 700;
+}
+
+/* Tombol Aksi */
+.btn-edit {
+    color: #2563eb;
+    font-weight: 600;
+    margin-right: 10px;
+}
+
+.btn-hapus {
+    color: #ef4444;
+    font-weight: 600;
 }

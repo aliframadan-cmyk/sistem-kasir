@@ -84,6 +84,8 @@ const App = () => {
         return saved ? JSON.parse(saved) : [];
     } catch { return []; }
   });
+  // NEW STATE: Konfirmasi Hapus Riwayat
+  const [showDeleteHistoryConfirm, setShowDeleteHistoryConfirm] = useState<string | null>(null);
 
   // --- POS STATE ---
   const [keranjang, setKeranjang] = useState<ItemKeranjang[]>([]);
@@ -243,38 +245,28 @@ const App = () => {
     printWindow.document.close();
   };
 
-  // --- FORMAT KIRIM WA DIPERBAIKI ---
+  // --- WA FORMAT ---
   const handleKirimWA = (trx: HistoryTransaksi) => {
     let pesan = `*STRUK BELANJA - ${NAMA_TOKO}*\n`;
     pesan += `No: ${trx.id}\n`;
     pesan += `Tanggal: ${trx.tanggal} ${trx.waktu}\n`;
     pesan += `Kasir: ${trx.kasir}\n`;
-    
-    // Tampilkan nama pelanggan jika ada (prioritas dari catatan/kasbon)
     const namaPelanggan = trx.catatan ? trx.catatan : "Umum";
     pesan += `Pelanggan: ${namaPelanggan}\n`;
-    
     pesan += `--------------------------------\n`;
 
-    // Loop Item dengan format 2 baris agar rapi
     trx.items.forEach(item => {
         pesan += `${item.nama}\n`;
-        // Format: 4 x 14,500 = 58,000
         pesan += `${item.qty} x ${item.hargaEcer.toLocaleString()} = ${item.subtotal.toLocaleString()}\n`;
     });
 
     pesan += `--------------------------------\n`;
-
-    // Total Section
     pesan += `Subtotal: Rp ${trx.subtotal.toLocaleString()}\n`;
-    
     if(trx.diskon > 0) pesan += `Diskon: - Rp ${trx.diskon.toLocaleString()}\n`;
     if(trx.ppn > 0) pesan += `PPN (11%): Rp ${trx.ppn.toLocaleString()}\n`;
-    
     pesan += `--------------------------------\n`;
     pesan += `*Total: Rp ${trx.total.toLocaleString()}*\n`;
     
-    // Status Pembayaran
     if (trx.metodePembayaran === 'Kasbon') {
         pesan += `Status: HUTANG / KASBON\n`;
     } else if (trx.metodePembayaran === 'QRIS') {
@@ -311,6 +303,12 @@ const App = () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Laporan");
     XLSX.writeFile(wb, `Laporan_${new Date().toLocaleDateString('id-ID').replace(/\//g,'-')}.xlsx`);
+  };
+
+  const handleDeleteHistory = () => {
+      if (!showDeleteHistoryConfirm) return;
+      setRiwayat(prev => prev.filter(trx => trx.id !== showDeleteHistoryConfirm));
+      setShowDeleteHistoryConfirm(null);
   };
 
   const tambahKeKeranjang = (produk: Produk) => {
@@ -354,7 +352,6 @@ const App = () => {
         const now = new Date();
         const trxId = `INV-${Date.now()}`;
         
-        // Simpan nama pelanggan di field 'catatan' agar bisa dipakai di WA
         const namaPelanggan = metodePembayaran === 'Kasbon' ? namaPelangganKasbon : "";
 
         const trx: HistoryTransaksi = { 
@@ -362,7 +359,7 @@ const App = () => {
             tanggal: now.toLocaleDateString('id-ID'), waktu: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
             items: [...keranjang], subtotal: subtotalMurni, diskon: nilaiDiskon, ppn: nilaiPPN, total: totalAkhir,
             bayar: nilaiBayar, kembali: nilaiKembalian, metodePembayaran,
-            catatan: namaPelanggan // Simpan nama di sini
+            catatan: namaPelanggan 
         };
 
         if (metodePembayaran === 'Kasbon') {
@@ -404,7 +401,6 @@ const App = () => {
     setShowAddModal(false); setShowSaveSuccess(true);
   };
 
-  // Helper Warna Tombol Bayar
   const getButtonBayarClass = () => {
       if (keranjang.length === 0) return 'bg-slate-300 cursor-not-allowed';
       if (metodePembayaran === 'QRIS') return 'bg-blue-600 hover:bg-blue-700';
@@ -706,6 +702,10 @@ const App = () => {
                                     <td className="p-4 flex justify-center gap-2">
                                         <button onClick={() => handlePrintStruk(trx)} className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200" title="Print Struk"><Printer size={16}/></button>
                                         <button onClick={() => handleKirimWA(trx)} className="p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200" title="Kirim WA"><MessageCircle size={16}/></button>
+                                        {/* HANYA ADMIN YANG BISA HAPUS */}
+                                        {currentUser?.role === 'admin' && (
+                                            <button onClick={() => setShowDeleteHistoryConfirm(trx.id)} className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200" title="Hapus Riwayat"><Trash2 size={16}/></button>
+                                        )}
                                     </td>
                                 </tr>
                             ))}
@@ -782,6 +782,21 @@ const App = () => {
                   <div className="flex gap-3">
                       <button onClick={() => setShowDeleteKasbonConfirm(null)} className="flex-1 bg-slate-100 py-3 rounded-xl font-bold">Batal</button>
                       <button onClick={handleDeleteKasbon} className="flex-1 bg-red-600 text-white py-3 rounded-xl font-bold">Hapus</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* --- NEW: CONFIRM DELETE HISTORY (ADMIN ONLY) --- */}
+      {showDeleteHistoryConfirm && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <div className="bg-white p-6 rounded-2xl shadow-xl max-w-sm w-full text-center animate-pop-in">
+                  <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4"><Trash2 size={32}/></div>
+                  <h3 className="font-bold text-lg mb-2">Hapus Riwayat?</h3>
+                  <p className="text-slate-500 text-sm mb-6">Transaksi <b>{showDeleteHistoryConfirm}</b> akan dihapus permanen.</p>
+                  <div className="flex gap-3">
+                      <button onClick={() => setShowDeleteHistoryConfirm(null)} className="flex-1 bg-slate-100 py-3 rounded-xl font-bold">Batal</button>
+                      <button onClick={handleDeleteHistory} className="flex-1 bg-red-600 text-white py-3 rounded-xl font-bold">Hapus</button>
                   </div>
               </div>
           </div>

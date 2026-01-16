@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { 
   LayoutGrid, ShoppingCart, History, Search, LayoutDashboard,
-  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, UserCircle, KeyRound, Settings, Users, UserPlus, XCircle, UserCheck, AlertTriangle, Minus, Plus, Download, AlertOctagon, MessageCircle, FileText, Tag, CreditCard, Banknote, QrCode, Coins, ChevronDown, BookUser, User
+  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, UserCircle, KeyRound, Settings, Users, UserPlus, XCircle, UserCheck, AlertTriangle, Minus, Plus, Download, AlertOctagon, MessageCircle, FileText, Tag, CreditCard, Banknote, QrCode, Coins, ChevronDown, BookUser, User, AlertCircle
 } from 'lucide-react';
 
 // --- KONFIGURASI TOKO ---
@@ -132,6 +132,9 @@ const App = () => {
   const [inputBayar, setInputBayar] = useState(""); 
 
   const [showEmptyWarning, setShowEmptyWarning] = useState(false);
+  // --- STATE BARU: POPUP UANG KURANG ---
+  const [showKurangBayarModal, setShowKurangBayarModal] = useState(false);
+
   const [showSuccess, setShowSuccess] = useState(false); 
   const [showSaveSuccess, setShowSaveSuccess] = useState(false); 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -164,7 +167,7 @@ const App = () => {
   }, [inputBayar, metodePembayaran, totalAkhir]);
 
   const nilaiKembalian = useMemo(() => nilaiBayar - totalAkhir, [nilaiBayar, totalAkhir]);
-  const isKurangBayar = metodePembayaran === 'Cash' && nilaiBayar < totalAkhir;
+  const isKurangBayar = useMemo(() => metodePembayaran === 'Cash' && nilaiBayar < totalAkhir, [metodePembayaran, nilaiBayar, totalAkhir]);
 
   const uniqueCategories = useMemo(() => ['Semua', ...new Set(produkList.map(item => item.kategori))], [produkList]);
   const filteredProduk = useMemo(() => produkList.filter(p => (selectedCategory === 'Semua' || p.kategori === selectedCategory) && p.nama.toLowerCase().includes(search.toLowerCase())), [produkList, search, selectedCategory]);
@@ -280,9 +283,13 @@ const App = () => {
 
   const handleBayarClick = () => {
       if (keranjang.length === 0) return setShowEmptyWarning(true);
-      if (metodePembayaran === 'Cash' && isKurangBayar) return alert("Uang kurang!");
       
-      // LOGIKA BARU: Jika Kasbon & Nama Kosong, tampilkan POPUP WARNING
+      // LOGIKA BARU: POPUP UANG KURANG
+      if (metodePembayaran === 'Cash' && isKurangBayar) {
+        setShowKurangBayarModal(true);
+        return;
+      }
+      
       if (metodePembayaran === 'Kasbon' && !namaPelangganKasbon.trim()) {
           setShowKasbonWarning(true);
           return;
@@ -836,6 +843,44 @@ const App = () => {
       </main>
 
       {/* --- MODALS --- */}
+
+      {/* MODAL BARU: UANG KURANG */}
+      {showKurangBayarModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4">
+            <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-sm w-full animate-pop-in text-center relative overflow-hidden">
+                <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
+                    <AlertTriangle size={32} />
+                </div>
+                <h3 className="font-black text-xl text-slate-800 mb-2">Uang Tidak Cukup!</h3>
+                <p className="text-slate-500 mb-6 text-sm">
+                    Pembayaran tidak dapat diproses karena uang tunai kurang.
+                </p>
+                
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 mb-6 space-y-2">
+                    <div className="flex justify-between text-sm text-slate-500">
+                        <span>Total Belanja</span>
+                        <span className="font-bold text-slate-700">Rp {totalAkhir.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-sm text-slate-500">
+                        <span>Uang Diterima</span>
+                        <span className="font-bold text-slate-700">Rp {nilaiBayar.toLocaleString()}</span>
+                    </div>
+                    <div className="h-px bg-slate-200 my-2"></div>
+                    <div className="flex justify-between text-base font-bold text-red-600">
+                        <span>KURANG</span>
+                        <span>Rp {(totalAkhir - nilaiBayar).toLocaleString()}</span>
+                    </div>
+                </div>
+
+                <button 
+                    onClick={() => setShowKurangBayarModal(false)} 
+                    className="w-full bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-black transition-all shadow-lg"
+                >
+                    Oke, Saya Cek Lagi
+                </button>
+            </div>
+        </div>
+      )}
 
       {/* POPUP WARNING KASBON NAME */}
       {showKasbonWarning && (

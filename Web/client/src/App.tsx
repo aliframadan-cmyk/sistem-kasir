@@ -8,7 +8,7 @@ import {
 // --- KONFIGURASI TOKO (BARU) ---
 // GANTI LINK INI dengan link gambar logomu sendiri nanti.
 const LOGO_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT_beJfa1EtbhzGt4z7dcWZM2EDGfwtCMZ3Pg&s"; 
-const NAMA_TOKO = "TOKO MAJU JAYA";
+const NAMA_TOKO = "TOKO SUDAR";
 
 // --- DATA AWAL PRODUK ---
 const DATA_PRODUK_AWAL = [

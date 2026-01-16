@@ -1,9 +1,14 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import * as XLSX from 'xlsx'; // Pastikan library ini sudah diinstall: npm install xlsx
+import * as XLSX from 'xlsx';
 import { 
-  LayoutGrid, ShoppingCart, Package, History, Search, LayoutDashboard,
+  LayoutGrid, ShoppingCart, History, Search, LayoutDashboard,
   Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, UserCircle, KeyRound, Settings, Users, UserPlus, XCircle, UserCheck, AlertTriangle, Minus, Plus, Download, AlertOctagon, MessageCircle
 } from 'lucide-react';
+
+// --- KONFIGURASI TOKO (BARU) ---
+// GANTI LINK INI dengan link gambar logomu sendiri nanti.
+const LOGO_URL = "https://cdn-icons-png.flaticon.com/512/3594/3594435.png"; 
+const NAMA_TOKO = "TOKO MAJU JAYA";
 
 // --- DATA AWAL PRODUK ---
 const DATA_PRODUK_AWAL = [
@@ -146,27 +151,21 @@ const App = () => {
 
   // --- LOGIKA KIRIM WHATSAPP (FITUR BARU) ---
   const handleKirimWA = (trx: HistoryTransaksi) => {
-    // 1. Susun Pesan
-    let pesan = `*STRUK BELANJA - TOKO MAJU JAYA*\n`;
+    let pesan = `*STRUK BELANJA - ${NAMA_TOKO}*\n`;
     pesan += `No: ${trx.id}\n`;
     pesan += `Tanggal: ${trx.tanggal} ${trx.waktu}\n`;
     pesan += `Kasir: ${trx.kasir}\n`;
     pesan += `--------------------------------\n`;
-    
     trx.items.forEach(item => {
         pesan += `${item.nama}\n`;
         pesan += `${item.qty} x ${item.hargaEcer.toLocaleString()} = ${item.subtotal.toLocaleString()}\n`;
     });
-    
     pesan += `--------------------------------\n`;
     pesan += `*TOTAL BAYAR: Rp ${trx.total.toLocaleString()}*\n`;
     pesan += `--------------------------------\n`;
     pesan += `Terima Kasih sudah berbelanja! 🙏`;
 
-    // 2. Encode Pesan agar bisa masuk URL
     const encodedPesan = encodeURIComponent(pesan);
-
-    // 3. Buka WhatsApp Web/Desktop tanpa nomor tujuan (biar user pilih kontak)
     window.open(`https://wa.me/?text=${encodedPesan}`, '_blank');
   };
 
@@ -332,8 +331,12 @@ const App = () => {
   if (!currentUser) return (
     <div className="flex h-screen items-center justify-center bg-slate-900 text-slate-200 font-sans p-4">
       <div className="bg-white text-slate-800 p-8 rounded-3xl shadow-2xl w-full max-w-sm animate-pop-in">
-        <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 text-white shadow-lg shadow-blue-500/50"><UserCircle size={40}/></div>
+        <div className="text-center mb-6">
+            {/* LOGO DI HALAMAN LOGIN */}
+            <div className="w-24 h-24 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg p-3">
+              <img src={LOGO_URL} alt="Logo Toko" className="w-full h-full object-contain"/>
+            </div>
+            <h2 className="text-lg font-bold text-slate-500">{NAMA_TOKO}</h2>
             <h1 className="text-2xl font-black text-slate-800">Login Sistem</h1>
         </div>
         <form onSubmit={handleLogin} className="space-y-4">
@@ -356,10 +359,12 @@ const App = () => {
         @media print { body * { visibility: hidden; } #struk-print, #struk-print * { visibility: visible; } #struk-print { display: block !important; position: absolute; left: 0; top: 0; width: 100%; } @page { margin: 0; size: auto; } }
       `}</style>
 
-      {/* STRUK PRINT */}
+      {/* STRUK PRINT (DENGAN LOGO) */}
       <div id="struk-print" className="hidden font-mono text-sm max-w-[80mm] mx-auto bg-white p-4">
         {lastTrx && <div className="text-center">
-            <h2 className="font-bold">TOKO MAJU JAYA</h2>
+            {/* LOGO DI STRUK (GRAYSCALE HEMAT TINTA) */}
+            <img src={LOGO_URL} alt="Logo" className="w-16 h-16 mx-auto mb-2 object-contain grayscale" />
+            <h2 className="font-bold text-lg">{NAMA_TOKO}</h2>
             <p className="text-xs">{lastTrx.tanggal} {lastTrx.waktu}</p>
             <p className="text-xs">No: {lastTrx.id}</p>
             <p className="text-xs">Kasir: {lastTrx.kasir}</p>
@@ -371,9 +376,12 @@ const App = () => {
         </div>}
       </div>
 
-      {/* SIDEBAR */}
+      {/* SIDEBAR (DENGAN LOGO) */}
       <aside className="w-24 bg-[#0F172A] flex flex-col items-center py-6 gap-4 z-20 no-print shadow-2xl">
-        <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl flex items-center justify-center text-white mb-6 shadow-lg shadow-blue-900/50"><Package size={32} /></div>
+        {/* LOGO DI SIDEBAR */}
+        <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-blue-900/20 p-2">
+          <img src={LOGO_URL} alt="Logo Toko" className="w-full h-full object-contain"/>
+        </div>
         <nav className="flex flex-col gap-4 flex-1 w-full px-3">
             {currentUser.role === 'admin' && (<button onClick={() => setActiveTab('dashboard')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all duration-300 ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}><LayoutDashboard size={24}/> <span className="text-[10px] font-bold">Dash</span></button>)}
             <button onClick={() => setActiveTab('pos')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all duration-300 ${activeTab === 'pos' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}><ShoppingCart size={24}/> <span className="text-[10px] font-bold">Kasir</span></button>
@@ -536,7 +544,6 @@ const App = () => {
                         <p className="font-black text-blue-600 text-xl">Rp {h.total.toLocaleString('id-ID')}</p>
                         <div className="flex gap-2">
                             <button onClick={() => { setLastTrx(h); setTimeout(() => window.print(), 100); }} className="text-xs font-bold bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-600 px-3 py-2 rounded-lg flex items-center gap-1 transition-all"><Printer size={14}/> Cetak</button>
-                            {/* TOMBOL WA DI HISTORY */}
                             <button onClick={() => handleKirimWA(h)} className="text-xs font-bold bg-green-50 hover:bg-green-100 text-green-600 hover:text-green-700 px-3 py-2 rounded-lg flex items-center gap-1 transition-all"><MessageCircle size={14}/> WA</button>
                             {currentUser.role === 'admin' && (
                                 <button onClick={() => clickHapusSatuRiwayat(h.id)} className="text-xs font-bold bg-red-50 hover:bg-red-100 text-red-500 px-3 py-2 rounded-lg flex items-center gap-1 transition-all"><Trash2 size={14}/> Hapus</button>

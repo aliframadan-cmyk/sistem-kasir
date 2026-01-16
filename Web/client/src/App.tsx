@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { 
   LayoutGrid, ShoppingCart, Package, History, Search, LayoutDashboard,
-  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, Percent, UserCircle, KeyRound, Settings, ShieldCheck, Users, UserPlus, XCircle
+  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, Percent, UserCircle, KeyRound, Settings, ShieldCheck, Users, UserPlus, XCircle, UserCheck
 } from 'lucide-react';
 
 // --- DATA AWAL PRODUK ---
@@ -41,8 +41,9 @@ const App = () => {
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [loginError, setLoginError] = useState('');
 
-  // --- STATE MANAJEMEN USER (NEW) ---
+  // --- STATE MANAJEMEN USER ---
   const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [showAddUserSuccess, setShowAddUserSuccess] = useState(false); // New State Animasi Sukses User
   const [newUser, setNewUser] = useState({ username: '', password: '', nama: '', role: 'kasir' });
 
   // --- STATE GANTI PASSWORD ---
@@ -125,7 +126,7 @@ const App = () => {
     setShowPassSuccess(false);
   };
 
-  // --- LOGIKA MANAJEMEN USER (NEW) ---
+  // --- LOGIKA MANAJEMEN USER ---
   const handleAddUser = () => {
     if (!newUser.username || !newUser.password || !newUser.nama) return alert("Semua kolom wajib diisi!");
     if (dbUsers.some(u => u.username === newUser.username)) return alert("Username sudah dipakai!");
@@ -134,9 +135,11 @@ const App = () => {
     const userToAdd = { id: newId, ...newUser };
     
     setDbUsers([...dbUsers, userToAdd]);
+    
+    // UI Feedback
     setShowAddUserModal(false);
     setNewUser({ username: '', password: '', nama: '', role: 'kasir' });
-    alert("User Berhasil Ditambahkan!");
+    setShowAddUserSuccess(true); // Trigger Animasi Sukses
   };
 
   const handleDeleteUser = (id: number) => {
@@ -314,7 +317,7 @@ const App = () => {
             {currentUser.role === 'admin' && (<button onClick={() => setActiveTab('inventory')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all duration-300 ${activeTab === 'inventory' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}><LayoutGrid size={24}/> <span className="text-[10px] font-bold">Stok</span></button>)}
             <button onClick={() => setActiveTab('history')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all duration-300 ${activeTab === 'history' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}><History size={24}/> <span className="text-[10px] font-bold">Riwayat</span></button>
             
-            {/* NEW MENU: USERS */}
+            {/* MENU: USERS */}
             {currentUser.role === 'admin' && (
                 <button onClick={() => setActiveTab('users')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all duration-300 ${activeTab === 'users' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
                     <Users size={24}/> <span className="text-[10px] font-bold">Tim</span>
@@ -396,7 +399,7 @@ const App = () => {
             </div>
           )}
 
-          {/* USERS MANAGEMENT TAB (ADMIN ONLY - NEW) */}
+          {/* USERS MANAGEMENT TAB (ADMIN ONLY) */}
           {activeTab === 'users' && currentUser.role === 'admin' && (
             <div className="max-w-4xl mx-auto">
                 <div className="flex justify-between items-end mb-8">
@@ -534,6 +537,22 @@ const App = () => {
                 </div>
 
                 <button onClick={handleAddUser} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-black shadow-lg mt-8 transition-all">SIMPAN AKUN</button>
+            </div>
+        </div>
+      )}
+
+      {/* NEW: MODAL SUKSES TAMBAH USER */}
+      {showAddUserSuccess && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[160] p-4">
+            <div className="bg-white p-10 rounded-[3rem] text-center shadow-2xl w-full max-w-sm animate-pop-in border-4 border-white">
+                <div className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-200">
+                    <UserCheck size={48} className="text-blue-600"/>
+                </div>
+                <h2 className="text-2xl font-black text-slate-800 mb-2">Akun Siap!</h2>
+                <p className="text-slate-400 text-sm mb-8 leading-relaxed">User baru telah ditambahkan ke tim.<br/>Bisa langsung digunakan untuk login.</p>
+                <button onClick={() => setShowAddUserSuccess(false)} className="w-full bg-slate-800 hover:bg-slate-900 text-white py-4 rounded-xl font-bold flex items-center gap-2 justify-center transition-all shadow-xl">
+                    OK, SIAP <ArrowRight size={18}/>
+                </button>
             </div>
         </div>
       )}

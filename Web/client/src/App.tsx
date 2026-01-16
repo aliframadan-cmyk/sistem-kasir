@@ -43,7 +43,7 @@ const App = () => {
 
   // --- STATE MANAJEMEN USER ---
   const [showAddUserModal, setShowAddUserModal] = useState(false);
-  const [showAddUserSuccess, setShowAddUserSuccess] = useState(false); // New State Animasi Sukses User
+  const [showAddUserSuccess, setShowAddUserSuccess] = useState(false);
   const [newUser, setNewUser] = useState({ username: '', password: '', nama: '', role: 'kasir' });
 
   // --- STATE GANTI PASSWORD ---
@@ -74,8 +74,8 @@ const App = () => {
   const [showEmptyWarning, setShowEmptyWarning] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false); 
   const [showSaveSuccess, setShowSaveSuccess] = useState(false); 
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false); // Untuk Produk
+  const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null); // Untuk Produk
   const [showAddModal, setShowAddModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
@@ -136,16 +136,25 @@ const App = () => {
     
     setDbUsers([...dbUsers, userToAdd]);
     
-    // UI Feedback
     setShowAddUserModal(false);
     setNewUser({ username: '', password: '', nama: '', role: 'kasir' });
-    setShowAddUserSuccess(true); // Trigger Animasi Sukses
+    setShowAddUserSuccess(true);
   };
 
+  // --- FIX UTAMA: HAPUS USER MENGGUNAKAN WINDOW.CONFIRM ---
   const handleDeleteUser = (id: number) => {
-    if (currentUser?.id === id) return alert("Tidak bisa menghapus akun sendiri!");
-    if (confirm("Yakin ingin menghapus user ini?")) {
-        setDbUsers(dbUsers.filter(u => u.id !== id));
+    // 1. Cek keamanan: Jangan hapus diri sendiri
+    if (currentUser && String(currentUser.id) === String(id)) {
+        alert("Tidak bisa menghapus akun yang sedang dipakai login!");
+        return;
+    }
+
+    // 2. Gunakan konfirmasi browser (Dijamin muncul)
+    const yakin = window.confirm("Apakah Anda yakin ingin menghapus User ini? Tindakan ini permanen.");
+
+    // 3. Jika user klik "OK", langsung hapus
+    if (yakin) {
+        setDbUsers(prev => prev.filter(u => u.id !== id));
     }
   };
 
@@ -399,7 +408,7 @@ const App = () => {
             </div>
           )}
 
-          {/* USERS MANAGEMENT TAB (ADMIN ONLY) */}
+          {/* USERS MANAGEMENT TAB (ADMIN ONLY) - FIX TOMBOL HAPUS */}
           {activeTab === 'users' && currentUser.role === 'admin' && (
             <div className="max-w-4xl mx-auto">
                 <div className="flex justify-between items-end mb-8">
@@ -425,8 +434,19 @@ const App = () => {
                             </div>
                             <div className="mt-6 flex justify-between items-center border-t border-dashed border-slate-100 pt-4">
                                 <span className="text-xs font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded">Pass: ••••••</span>
+                                
                                 {user.id !== currentUser.id && (
-                                    <button onClick={() => handleDeleteUser(user.id)} className="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 p-2 rounded-lg transition-all"><Trash2 size={18}/></button>
+                                    <button 
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.stopPropagation(); 
+                                            handleDeleteUser(user.id);
+                                        }} 
+                                        className="relative z-50 text-red-500 hover:text-white bg-red-50 hover:bg-red-500 p-2 rounded-lg transition-all border border-red-100 cursor-pointer"
+                                        title="Hapus User"
+                                    >
+                                        <Trash2 size={18}/>
+                                    </button>
                                 )}
                                 {user.id === currentUser.id && <span className="text-xs text-green-500 font-bold bg-green-50 px-2 py-1 rounded">Aktif</span>}
                             </div>
@@ -506,7 +526,7 @@ const App = () => {
         </div>
       )}
 
-      {/* NEW: MODAL TAMBAH USER */}
+      {/* MODAL TAMBAH USER */}
       {showAddUserModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[150] p-4">
             <div className="bg-white w-full max-w-md rounded-[2rem] p-8 shadow-2xl animate-pop-in border-4 border-white relative">
@@ -541,7 +561,7 @@ const App = () => {
         </div>
       )}
 
-      {/* NEW: MODAL SUKSES TAMBAH USER */}
+      {/* MODAL SUKSES TAMBAH USER */}
       {showAddUserSuccess && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[160] p-4">
             <div className="bg-white p-10 rounded-[3rem] text-center shadow-2xl w-full max-w-sm animate-pop-in border-4 border-white">

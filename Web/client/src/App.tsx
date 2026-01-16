@@ -90,6 +90,7 @@ const App = () => {
 
   // --- POS STATE ---
   const [keranjang, setKeranjang] = useState<ItemKeranjang[]>([]);
+  const [holdOrder, setHoldOrder] = useState<ItemKeranjang[] | null>(null);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Semua");
   const [barcodeInput, setBarcodeInput] = useState("");
@@ -333,6 +334,35 @@ const App = () => {
     if (item) { tambahKeKeranjang(item); setBarcodeInput(""); } else { alert("Barang tidak ditemukan!"); setBarcodeInput(""); }
   };
 
+// --- FUNGSI HOLD ORDER ---
+  const handleHoldOrder = () => {
+    if (keranjang.length === 0) return;
+    setHoldOrder([...keranjang]);
+    setKeranjang([]);
+    Swal.fire({
+      title: "Antrean Ditunda",
+      text: "Pesanan disimpan sementara. Silakan layani pelanggan berikutnya.",
+      icon: "info",
+      timer: 2000,
+      showConfirmButton: false,
+      showClass: { popup: 'animate__animated animate__fadeInRight' }
+    });
+  };
+
+  const handleRestoreOrder = () => {
+    if (!holdOrder) return;
+    if (keranjang.length > 0) {
+      Swal.fire({
+        title: "Keranjang Masih Terisi",
+        text: "Selesaikan atau kosongkan keranjang saat ini terlebih dahulu.",
+        icon: "warning"
+      });
+      return;
+    }
+    setKeranjang([...holdOrder]);
+    setHoldOrder(null);
+  };
+
   const handleBayarClick = () => {
       if (keranjang.length === 0) return setShowEmptyWarning(true);
       if (metodePembayaran === 'Cash' && isKurangBayar) return setShowKurangBayarModal(true);
@@ -530,9 +560,34 @@ const App = () => {
 
                 <div className="w-full md:w-96 bg-white rounded-3xl shadow-xl border border-slate-100 flex flex-col h-full overflow-hidden">
                     <div className="p-4 bg-slate-800 text-white flex justify-between items-center">
-                        <h3 className="font-bold flex items-center gap-2"><ShoppingCart size={20}/> Keranjang</h3>
-                        <span className="bg-white/20 px-2 py-1 rounded-lg text-xs font-bold">{keranjang.reduce((a,b)=>a+b.qty,0)} Items</span>
+                        <div className="flex items-center gap-3">
+                            <h3 className="font-bold flex items-center gap-2">
+                                <ShoppingCart size={20}/> Keranjang
+                            </h3>
+                            {/* Tombol Ambil (Restore) muncul di sini jika ada data tunda */}
+                            {holdOrder && (
+                                <button 
+                                    onClick={handleRestoreOrder}
+                                    className="bg-slate-100 text-slate-800 text-[10px] px-2 py-1 rounded-lg font-black animate-pulse"
+                                >
+                                    AMBIL PESANAN
+                                </button>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                            {/* Tombol Tunda (Hold) - Icon Panah Biru */}
+                            {keranjang.length > 0 && (
+                                <button title="Tunda Pesanan" onClick={handleHoldOrder} className="text-blue-400 hover:text-white transition-colors">
+                                    <ArrowRight size={20}/>
+                                </button>
+                            )}
+                            {/* Ini adalah span 'Items' Anda yang tadi, tetap ada di sini */}
+                            <span className="bg-white/20 px-2 py-1 rounded-lg text-xs font-bold">
+                                {keranjang.reduce((a,b)=>a+b.qty,0)} Items
+                            </span>
+                        </div>
                     </div>
+                    
                     <div className="flex-1 overflow-y-auto p-4 space-y-3">
                         {keranjang.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-2">

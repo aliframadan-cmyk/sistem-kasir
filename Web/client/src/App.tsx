@@ -112,8 +112,10 @@ const App = () => {
   const [showSuccess, setShowSuccess] = useState(false); 
   const [showSaveSuccess, setShowSaveSuccess] = useState(false); 
   
+  // FIX: DELETE CONFIRM FOR PRODUCT
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+
   const [showAddModal, setShowAddModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
@@ -305,10 +307,9 @@ const App = () => {
     XLSX.writeFile(wb, `Laporan_${new Date().toLocaleDateString('id-ID').replace(/\//g,'-')}.xlsx`);
   };
 
-  // --- EXPORT KASBON EXCEL (NEW FEATURE) ---
+  // --- EXPORT KASBON EXCEL ---
   const handleExportKasbon = () => {
       if (kasbonList.length === 0) return alert("Belum ada data kasbon.");
-      
       const data = kasbonList.map(k => ({
           "ID Transaksi": k.id,
           "Tanggal": k.tanggal,
@@ -319,7 +320,6 @@ const App = () => {
           "Status": k.status,
           "Detail Barang": k.items.map(i => `${i.nama} (${i.qty})`).join(', ')
       }));
-
       const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Data Kasbon");
@@ -330,6 +330,15 @@ const App = () => {
       if (!showDeleteHistoryConfirm) return;
       setRiwayat(prev => prev.filter(trx => trx.id !== showDeleteHistoryConfirm));
       setShowDeleteHistoryConfirm(null);
+  };
+
+  // FIX: FUNGSI HAPUS PRODUK
+  const handleDeleteProduk = () => {
+      if (deleteTargetId !== null) {
+          setProdukList(prev => prev.filter(p => p.id !== deleteTargetId));
+          setDeleteTargetId(null);
+          setShowDeleteConfirm(false);
+      }
   };
 
   const tambahKeKeranjang = (produk: Produk) => {
@@ -792,6 +801,21 @@ const App = () => {
                   <div className="flex gap-3">
                       <button onClick={() => setShowLunasConfirm(null)} className="flex-1 bg-slate-100 py-3 rounded-xl font-bold">Batal</button>
                       <button onClick={() => handleLunasiKasbon(showLunasConfirm.id)} className="flex-1 bg-green-600 text-white py-3 rounded-xl font-bold">Ya, Lunas</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* FIX: MODAL KONFIRMASI HAPUS PRODUK YANG SEBELUMNYA HILANG */}
+      {showDeleteConfirm && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <div className="bg-white p-6 rounded-2xl shadow-xl max-w-sm w-full text-center animate-pop-in">
+                  <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4"><Trash2 size={32}/></div>
+                  <h3 className="font-bold text-lg mb-2">Hapus Produk?</h3>
+                  <p className="text-slate-500 text-sm mb-6">Produk akan dihapus permanen dari daftar.</p>
+                  <div className="flex gap-3">
+                      <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 bg-slate-100 py-3 rounded-xl font-bold">Batal</button>
+                      <button onClick={handleDeleteProduk} className="flex-1 bg-red-600 text-white py-3 rounded-xl font-bold">Hapus</button>
                   </div>
               </div>
           </div>

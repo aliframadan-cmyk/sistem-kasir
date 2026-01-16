@@ -68,7 +68,7 @@ const App = () => {
   const [loginError, setLoginError] = useState('');
 
   // --- STATE MODALS & WARNINGS ---
-  const [showKasbonWarning, setShowKasbonWarning] = useState(false); // <--- POPUP BARU
+  const [showKasbonWarning, setShowKasbonWarning] = useState(false);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [showAddUserSuccess, setShowAddUserSuccess] = useState(false);
   const [showDeleteUserConfirm, setShowDeleteUserConfirm] = useState(false);
@@ -178,7 +178,9 @@ const App = () => {
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('kasir_session', JSON.stringify(currentUser));
+      // Jika kasir login, masuk ke POS. Jika Admin, biarkan default (dashboard)
       if (currentUser.role === 'kasir') setActiveTab('pos');
+      else if (currentUser.role === 'admin') setActiveTab('dashboard');
     } else { localStorage.removeItem('kasir_session'); }
   }, [currentUser]);
 
@@ -375,17 +377,28 @@ const App = () => {
       {/* SIDEBAR */}
       <aside className="w-24 bg-slate-900 text-white flex flex-col items-center py-6 gap-2 shadow-2xl z-20">
         <div className="mb-6 p-2 bg-white/10 rounded-2xl"><img src={LOGO_URL} alt="Logo" className="w-10 h-10 object-contain"/></div>
-        <button onClick={() => setActiveTab('dashboard')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><LayoutDashboard size={24}/> <span className="text-[10px] font-bold">Dash</span></button>
-        <button onClick={() => setActiveTab('pos')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'pos' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><ShoppingCart size={24}/> <span className="text-[10px] font-bold">Kasir</span></button>
         
-        {/* MENU KASBON HANYA UNTUK ADMIN */}
+        {/* DASHBOARD (SEMUA BISA AKSES) */}
+        <button onClick={() => setActiveTab('dashboard')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><LayoutDashboard size={24}/> <span className="text-[10px] font-bold">Dash</span></button>
+        
+        {/* MENU KASIR (POS) - HANYA UNTUK ROLE KASIR */}
+        {currentUser?.role === 'kasir' && (
+          <button onClick={() => setActiveTab('pos')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'pos' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><ShoppingCart size={24}/> <span className="text-[10px] font-bold">Kasir</span></button>
+        )}
+        
+        {/* MENU KASBON - HANYA UNTUK ADMIN */}
         {currentUser?.role === 'admin' && (
             <button onClick={() => setActiveTab('kasbon')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'kasbon' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><BookUser size={24}/> <span className="text-[10px] font-bold">Kasbon</span></button>
         )}
 
         <button onClick={() => setActiveTab('inventory')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'inventory' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><LayoutGrid size={24}/> <span className="text-[10px] font-bold">Produk</span></button>
         <button onClick={() => setActiveTab('history')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'history' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><History size={24}/> <span className="text-[10px] font-bold">Riwayat</span></button>
-        <button onClick={() => setActiveTab('users')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'users' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><Users size={24}/> <span className="text-[10px] font-bold">Users</span></button>
+        
+        {/* MENU USERS - HANYA UNTUK ADMIN */}
+        {currentUser?.role === 'admin' && (
+          <button onClick={() => setActiveTab('users')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'users' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><Users size={24}/> <span className="text-[10px] font-bold">Users</span></button>
+        )}
+
         <div className="mt-auto flex flex-col gap-2 w-full px-2">
             <button onClick={() => setShowPasswordModal(true)} className="p-3 rounded-xl bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white transition-all"><KeyRound size={20} className="mx-auto"/></button>
             <button onClick={handleLogout} className="p-3 rounded-xl bg-red-900/50 text-red-400 hover:bg-red-600 hover:text-white transition-all"><LogOut size={20} className="mx-auto"/></button>

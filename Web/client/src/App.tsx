@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
+import Swal from 'sweetalert2';
+import 'animate.css';
 import { 
   LayoutGrid, ShoppingCart, History, Search, LayoutDashboard,
   Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Eraser, ScanBarcode, Wallet, ArrowRight, UserCircle, KeyRound, Users, UserPlus, AlertTriangle, BookUser, Banknote, Tag, MessageCircle, Calendar, Phone, Printer, FileText, Download, X, Lock
@@ -216,7 +218,15 @@ const App = () => {
       currentUser?.role === 'admin' || trx.kasir === currentUser?.nama
     );
 
-    if (filteredHistory.length === 0) return alert("Belum ada data.");
+    if (filteredHistory.length === 0) {
+      Swal.fire({
+        title: "Data Tidak Ditemukan",
+        text: "Maaf, belum ada riwayat transaksi yang bisa diunduh.",
+        icon: "error",
+        showClass: { popup: 'animate__animated animate__shakeX' }
+      });
+      return;
+    }
     
     const data = filteredHistory.flatMap(t => t.items.map(item => ({ "ID": t.id, "Tgl": t.tanggal, "Kasir": t.kasir, "Item": item.nama, "Harga": item.hargaEcer, "Qty": item.qty, "Subtotal": item.subtotal, "Total Trx": t.total })));
     const ws = XLSX.utils.json_to_sheet(data);
@@ -226,13 +236,16 @@ const App = () => {
   };
 
   const handleExportKasbon = () => {
-      if (kasbonList.length === 0) return alert("Belum ada data kasbon.");
-      const data = kasbonList.map(k => ({ "ID": k.id, "Tgl": k.tanggal, "Nama": k.namaPelanggan, "HP": k.nomorHP, "Tempo": k.jatuhTempo, "Total": k.total, "Status": k.status }));
-      const ws = XLSX.utils.json_to_sheet(data);
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Data Kasbon");
-      XLSX.writeFile(wb, `Backup_Kasbon_${new Date().toLocaleDateString('id-ID').replace(/\//g, '-')}.xlsx`);
-  };
+      if (kasbonList.length === 0) {
+        Swal.fire({
+            title: "Kasbon Kosong",
+            text: "Belum ada data kasbon untuk dibackup.",
+            icon: "warning",
+            showClass: { popup: 'animate__animated animate__fadeInDown' }
+        });
+        return;
+      }
+    };
 
   const handleDeleteHistory = () => {
       if (!showDeleteHistoryConfirm) return;

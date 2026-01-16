@@ -381,7 +381,12 @@ const App = () => {
         <div className="mb-6 p-2 bg-white/10 rounded-2xl"><img src={LOGO_URL} alt="Logo" className="w-10 h-10 object-contain"/></div>
         <button onClick={() => setActiveTab('dashboard')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><LayoutDashboard size={24}/> <span className="text-[10px] font-bold">Dash</span></button>
         <button onClick={() => setActiveTab('pos')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'pos' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><ShoppingCart size={24}/> <span className="text-[10px] font-bold">Kasir</span></button>
-        <button onClick={() => setActiveTab('kasbon')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'kasbon' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><BookUser size={24}/> <span className="text-[10px] font-bold">Kasbon</span></button>
+        
+        {/* MENU KASBON HANYA UNTUK ADMIN */}
+        {currentUser?.role === 'admin' && (
+            <button onClick={() => setActiveTab('kasbon')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'kasbon' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><BookUser size={24}/> <span className="text-[10px] font-bold">Kasbon</span></button>
+        )}
+
         <button onClick={() => setActiveTab('inventory')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'inventory' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><LayoutGrid size={24}/> <span className="text-[10px] font-bold">Produk</span></button>
         <button onClick={() => setActiveTab('history')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'history' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><History size={24}/> <span className="text-[10px] font-bold">Riwayat</span></button>
         <button onClick={() => setActiveTab('users')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'users' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><Users size={24}/> <span className="text-[10px] font-bold">Users</span></button>
@@ -600,8 +605,8 @@ const App = () => {
             </div>
           )}
 
-            {/* KASBON TAB */}
-            {activeTab === 'kasbon' && (
+            {/* KASBON TAB - HANYA ADMIN */}
+            {activeTab === 'kasbon' && currentUser?.role === 'admin' && (
              <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center">
                     <div>

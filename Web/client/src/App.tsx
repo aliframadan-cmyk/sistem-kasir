@@ -178,7 +178,7 @@ const App = () => {
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('kasir_session', JSON.stringify(currentUser));
-      // Jika kasir login, masuk ke POS. Jika Admin, biarkan default (dashboard)
+      // AUTO REDIRECT SESUAI ROLE
       if (currentUser.role === 'kasir') setActiveTab('pos');
       else if (currentUser.role === 'admin') setActiveTab('dashboard');
     } else { localStorage.removeItem('kasir_session'); }
@@ -378,8 +378,10 @@ const App = () => {
       <aside className="w-24 bg-slate-900 text-white flex flex-col items-center py-6 gap-2 shadow-2xl z-20">
         <div className="mb-6 p-2 bg-white/10 rounded-2xl"><img src={LOGO_URL} alt="Logo" className="w-10 h-10 object-contain"/></div>
         
-        {/* DASHBOARD (SEMUA BISA AKSES) */}
-        <button onClick={() => setActiveTab('dashboard')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><LayoutDashboard size={24}/> <span className="text-[10px] font-bold">Dash</span></button>
+        {/* DASHBOARD - HANYA ADMIN */}
+        {currentUser?.role === 'admin' && (
+             <button onClick={() => setActiveTab('dashboard')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'dashboard' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><LayoutDashboard size={24}/> <span className="text-[10px] font-bold">Dash</span></button>
+        )}
         
         {/* MENU KASIR (POS) - HANYA UNTUK ROLE KASIR */}
         {currentUser?.role === 'kasir' && (
@@ -391,7 +393,12 @@ const App = () => {
             <button onClick={() => setActiveTab('kasbon')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'kasbon' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><BookUser size={24}/> <span className="text-[10px] font-bold">Kasbon</span></button>
         )}
 
-        <button onClick={() => setActiveTab('inventory')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'inventory' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><LayoutGrid size={24}/> <span className="text-[10px] font-bold">Produk</span></button>
+        {/* PRODUK - HANYA ADMIN */}
+        {currentUser?.role === 'admin' && (
+             <button onClick={() => setActiveTab('inventory')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'inventory' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><LayoutGrid size={24}/> <span className="text-[10px] font-bold">Produk</span></button>
+        )}
+
+        {/* RIWAYAT - SEMUA BISA */}
         <button onClick={() => setActiveTab('history')} className={`p-4 rounded-2xl w-full flex flex-col items-center justify-center gap-1 transition-all ${activeTab === 'history' ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/50' : 'text-slate-400 hover:bg-slate-800'}`}><History size={24}/> <span className="text-[10px] font-bold">Riwayat</span></button>
         
         {/* MENU USERS - HANYA UNTUK ADMIN */}
@@ -428,8 +435,8 @@ const App = () => {
         </header>
 
         <div className="flex-1 overflow-auto p-4 md:p-6">
-          {/* DASHBOARD TAB */}
-          {activeTab === 'dashboard' && (
+          {/* DASHBOARD TAB - HANYA ADMIN */}
+          {activeTab === 'dashboard' && currentUser?.role === 'admin' && (
             <div className="space-y-6 max-w-6xl mx-auto animate-fade-in">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="bg-gradient-to-br from-blue-500 to-blue-600 p-6 rounded-3xl text-white shadow-xl shadow-blue-200">
@@ -487,8 +494,8 @@ const App = () => {
             </div>
           )}
 
-          {/* POS TAB */}
-          {activeTab === 'pos' && (
+          {/* POS TAB - HANYA KASIR */}
+          {activeTab === 'pos' && currentUser?.role === 'kasir' && (
             <div className="flex flex-col md:flex-row gap-4 h-[calc(100vh-100px)]">
                 {/* KIRI: PRODUK */}
                 <div className="flex-1 flex flex-col bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden">
@@ -686,8 +693,8 @@ const App = () => {
              </div>
           )}
 
-          {/* INVENTORY TAB */}
-          {activeTab === 'inventory' && (
+          {/* INVENTORY TAB - HANYA ADMIN */}
+          {activeTab === 'inventory' && currentUser?.role === 'admin' && (
              <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center">
                     <div>
@@ -731,7 +738,7 @@ const App = () => {
              </div>
           )}
 
-          {/* HISTORY TAB */}
+          {/* HISTORY TAB - SEMUA BISA */}
           {activeTab === 'history' && (
              <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center">
@@ -790,7 +797,7 @@ const App = () => {
              </div>
           )}
 
-          {/* USERS TAB */}
+          {/* USERS TAB - HANYA ADMIN */}
           {activeTab === 'users' && currentUser?.role === 'admin' && (
              <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden max-w-4xl mx-auto">
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center">
@@ -830,7 +837,7 @@ const App = () => {
 
       {/* --- MODALS --- */}
 
-      {/* POPUP WARNING KASBON NAME (NEW) */}
+      {/* POPUP WARNING KASBON NAME */}
       {showKasbonWarning && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
             <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-sm w-full animate-pop-in text-center">

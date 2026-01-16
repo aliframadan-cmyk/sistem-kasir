@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { 
   LayoutGrid, ShoppingCart, History, Search, LayoutDashboard,
-  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Eraser, ScanBarcode, Wallet, ArrowRight, UserCircle, KeyRound, Users, UserPlus, AlertTriangle, BookUser, Banknote, Tag, MessageCircle, Calendar, Phone, Printer, FileText, Download
+  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Eraser, ScanBarcode, Wallet, ArrowRight, UserCircle, KeyRound, Users, UserPlus, AlertTriangle, BookUser, Banknote, Tag, MessageCircle, Calendar, Phone, Printer, FileText, Download, X
 } from 'lucide-react';
 
 // --- KONFIGURASI TOKO ---
@@ -100,22 +100,22 @@ const App = () => {
   // --- MODALS STATE ---
   const [showKasbonWarning, setShowKasbonWarning] = useState(false);
   const [kasbonWarningMsg, setKasbonWarningMsg] = useState("");
+  
+  // MODAL USER
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [showDeleteUserConfirm, setShowDeleteUserConfirm] = useState(false);
   const [userToDelete, setUserToDelete] = useState<{id: number, nama: string} | null>(null);
-  
   const [newUser, setNewUser] = useState({ username: '', password: '', nama: '', role: 'kasir' });
-  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false); // Untuk ganti password sendiri
 
   const [showEmptyWarning, setShowEmptyWarning] = useState(false);
   const [showKurangBayarModal, setShowKurangBayarModal] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false); 
   const [showSaveSuccess, setShowSaveSuccess] = useState(false); 
   
-  // FIX: DELETE CONFIRM FOR PRODUCT
+  // MODAL PRODUK
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
-
   const [showAddModal, setShowAddModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
@@ -126,23 +126,17 @@ const App = () => {
 
   // --- CALCULATIONS ---
   const subtotalMurni = useMemo(() => keranjang.reduce((a, b) => a + b.subtotal, 0), [keranjang]);
-  
   const nilaiDiskon = useMemo(() => {
     const val = parseInt(inputDiskon.replace(/\D/g, '')) || 0;
     return val > subtotalMurni ? subtotalMurni : val; 
   }, [inputDiskon, subtotalMurni]);
-
   const subtotalSetelahDiskon = subtotalMurni - nilaiDiskon;
-  
   const nilaiPPN = useMemo(() => (ppnAktif ? Math.round(subtotalSetelahDiskon * 0.11) : 0), [ppnAktif, subtotalSetelahDiskon]);
-  
   const totalAkhir = subtotalSetelahDiskon + nilaiPPN;
-
   const nilaiBayar = useMemo(() => {
     if (metodePembayaran === 'QRIS' || metodePembayaran === 'Kasbon') return totalAkhir; 
     return parseInt(inputBayar.replace(/\D/g, '')) || 0;
   }, [inputBayar, metodePembayaran, totalAkhir]);
-
   const nilaiKembalian = useMemo(() => nilaiBayar - totalAkhir, [nilaiBayar, totalAkhir]);
   const isKurangBayar = useMemo(() => metodePembayaran === 'Cash' && nilaiBayar < totalAkhir, [metodePembayaran, nilaiBayar, totalAkhir]);
 
@@ -185,100 +179,22 @@ const App = () => {
     setCurrentUser(null); setKeranjang([]); setPpnAktif(false); setInputDiskon(""); setInputBayar(""); setMetodePembayaran('Cash');
   };
 
-  // --- PRINT STRUK (THERMAL) ---
+  // --- PRINT & WA ---
   const handlePrintStruk = (trx: HistoryTransaksi) => {
     const printWindow = window.open('', '', 'width=350,height=600');
     if (!printWindow) return alert("Pop-up blocked!");
-
-    const itemsHtml = trx.items.map(item => `
-      <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-        <span style="font-size: 12px;">${item.nama} x${item.qty}</span>
-        <span style="font-size: 12px; font-weight: bold;">${(item.hargaEcer * item.qty).toLocaleString()}</span>
-      </div>
-    `).join('');
-
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Struk - ${trx.id}</title>
-          <style>
-            body { font-family: 'Courier New', monospace; padding: 10px; width: 58mm; margin: 0 auto; color: #000; }
-            .header { text-align: center; margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 5px; }
-            .logo-img { width: 50px; height: 50px; object-fit: contain; margin-bottom: 5px; filter: grayscale(100%); } 
-            .items { margin-bottom: 10px; border-bottom: 1px dashed #000; padding-bottom: 5px; }
-            .totals { text-align: right; }
-            .footer { text-align: center; margin-top: 15px; font-size: 10px; }
-            h2 { margin: 0; font-size: 16px; font-weight: bold; }
-            p { margin: 2px 0; font-size: 12px; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <img src="${LOGO_URL}" class="logo-img" alt="Logo" />
-            <h2>${NAMA_TOKO}</h2>
-            <p>${ALAMAT_TOKO}</p>
-            <p>${TELP_TOKO}</p>
-            <p style="margin-top:5px;">${trx.id}</p>
-            <p>${trx.tanggal} ${trx.waktu}</p>
-            <p>Kasir: ${trx.kasir}</p>
-          </div>
-          <div class="items">
-            ${itemsHtml}
-          </div>
-          <div class="totals">
-             ${trx.diskon > 0 ? `<p>Diskon: -${trx.diskon.toLocaleString()}</p>` : ''}
-             ${trx.ppn > 0 ? `<p>PPN 11%: ${trx.ppn.toLocaleString()}</p>` : ''}
-             <p style="font-size: 14px; font-weight: bold; margin-top:5px;">TOTAL: ${trx.total.toLocaleString()}</p>
-             <p>Bayar: ${trx.bayar.toLocaleString()}</p>
-             <p>Kembali: ${trx.kembali.toLocaleString()}</p>
-             <p>Metode: ${trx.metodePembayaran}</p>
-          </div>
-          <div class="footer">
-            <p>Terima Kasih</p>
-            <p>Barang yang dibeli tidak dapat ditukar</p>
-          </div>
-          <script>
-            window.onload = function() { window.print(); window.close(); }
-          </script>
-        </body>
-      </html>
-    `);
+    const itemsHtml = trx.items.map(item => `<div style="display: flex; justify-content: space-between; margin-bottom: 5px;"><span style="font-size: 12px;">${item.nama} x${item.qty}</span><span style="font-size: 12px; font-weight: bold;">${(item.hargaEcer * item.qty).toLocaleString()}</span></div>`).join('');
+    printWindow.document.write(`<html><head><title>Struk - ${trx.id}</title><style>body{font-family:'Courier New',monospace;padding:10px;width:58mm;margin:0 auto;color:#000}.header{text-align:center;margin-bottom:10px;border-bottom:1px dashed #000;padding-bottom:5px}.logo-img{width:50px;height:50px;object-fit:contain;margin-bottom:5px;filter:grayscale(100%)}.items{margin-bottom:10px;border-bottom:1px dashed #000;padding-bottom:5px}.totals{text-align:right}.footer{text-align:center;margin-top:15px;font-size:10px}h2{margin:0;font-size:16px;font-weight:bold}p{margin:2px 0;font-size:12px}</style></head><body><div class="header"><img src="${LOGO_URL}" class="logo-img"/><h2>${NAMA_TOKO}</h2><p>${ALAMAT_TOKO}</p><p>${TELP_TOKO}</p><p style="margin-top:5px;">${trx.id}</p><p>${trx.tanggal} ${trx.waktu}</p><p>Kasir: ${trx.kasir}</p></div><div class="items">${itemsHtml}</div><div class="totals">${trx.diskon > 0 ? `<p>Diskon: -${trx.diskon.toLocaleString()}</p>` : ''}${trx.ppn > 0 ? `<p>PPN 11%: ${trx.ppn.toLocaleString()}</p>` : ''}<p style="font-size: 14px; font-weight: bold; margin-top:5px;">TOTAL: ${trx.total.toLocaleString()}</p><p>Bayar: ${trx.bayar.toLocaleString()}</p><p>Kembali: ${trx.kembali.toLocaleString()}</p><p>Metode: ${trx.metodePembayaran}</p></div><div class="footer"><p>Terima Kasih</p><p>Barang yang dibeli tidak dapat ditukar</p></div><script>window.onload=function(){window.print();window.close()}</script></body></html>`);
     printWindow.document.close();
   };
 
-  // --- WA FORMAT ---
   const handleKirimWA = (trx: HistoryTransaksi) => {
-    let pesan = `*STRUK BELANJA - ${NAMA_TOKO}*\n`;
-    pesan += `No: ${trx.id}\n`;
-    pesan += `Tanggal: ${trx.tanggal} ${trx.waktu}\n`;
-    pesan += `Kasir: ${trx.kasir}\n`;
-    const namaPelanggan = trx.catatan ? trx.catatan : "Umum";
-    pesan += `Pelanggan: ${namaPelanggan}\n`;
-    pesan += `--------------------------------\n`;
-
-    trx.items.forEach(item => {
-        pesan += `${item.nama}\n`;
-        pesan += `${item.qty} x ${item.hargaEcer.toLocaleString()} = ${item.subtotal.toLocaleString()}\n`;
-    });
-
-    pesan += `--------------------------------\n`;
-    pesan += `Subtotal: Rp ${trx.subtotal.toLocaleString()}\n`;
+    let pesan = `*STRUK BELANJA - ${NAMA_TOKO}*\nNo: ${trx.id}\nTanggal: ${trx.tanggal} ${trx.waktu}\nKasir: ${trx.kasir}\n--------------------------------\n`;
+    trx.items.forEach(item => { pesan += `${item.nama}\n${item.qty} x ${item.hargaEcer.toLocaleString()} = ${item.subtotal.toLocaleString()}\n`; });
+    pesan += `--------------------------------\nSubtotal: Rp ${trx.subtotal.toLocaleString()}\n`;
     if(trx.diskon > 0) pesan += `Diskon: - Rp ${trx.diskon.toLocaleString()}\n`;
     if(trx.ppn > 0) pesan += `PPN (11%): Rp ${trx.ppn.toLocaleString()}\n`;
-    pesan += `--------------------------------\n`;
-    pesan += `*Total: Rp ${trx.total.toLocaleString()}*\n`;
-    
-    if (trx.metodePembayaran === 'Kasbon') {
-        pesan += `Status: HUTANG / KASBON\n`;
-    } else if (trx.metodePembayaran === 'QRIS') {
-        pesan += `Status: LUNAS (QRIS)\n`;
-    } else {
-        pesan += `Status: LUNAS (TUNAI)\n`;
-    }
-
-    pesan += `--------------------------------\n`;
-    pesan += `Terima Kasih! 🙏`;
-
+    pesan += `--------------------------------\n*Total: Rp ${trx.total.toLocaleString()}*\nStatus: ${trx.metodePembayaran === 'Kasbon' ? 'HUTANG' : 'LUNAS'}\n--------------------------------\nTerima Kasih! 🙏`;
     window.open(`https://wa.me/?text=${encodeURIComponent(pesan)}`, '_blank');
   };
 
@@ -286,40 +202,23 @@ const App = () => {
       let phone = kasbon.nomorHP.replace(/\D/g,'');
       if (phone.startsWith('0')) phone = '62' + phone.substring(1);
       const jatuhTempoIndo = new Date(kasbon.jatuhTempo).toLocaleDateString('id-ID', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
-      const pesan = `Halo Kak *${kasbon.namaPelanggan}*,\n\nKami dari *${NAMA_TOKO}* ingin mengingatkan bahwa tagihan kasbon sebesar *Rp ${kasbon.total.toLocaleString()}* akan/sudah jatuh tempo pada:\n📅 *${jatuhTempoIndo}*\n\nMohon segera melakukan pembayaran ya kak agar bisa belanja kembali.\n\nTerima kasih! 🙏`;
+      const pesan = `Halo Kak *${kasbon.namaPelanggan}*,\n\nKami dari *${NAMA_TOKO}* ingin mengingatkan tagihan kasbon sebesar *Rp ${kasbon.total.toLocaleString()}* jatuh tempo pada:\n📅 *${jatuhTempoIndo}*\n\nMohon segera melakukan pembayaran. Terima kasih! 🙏`;
       window.open(`https://wa.me/${phone}?text=${encodeURIComponent(pesan)}`, '_blank');
   };
 
-  const checkIsOverdue = (dateString: string) => {
-      const today = new Date();
-      today.setHours(0,0,0,0);
-      const dueDate = new Date(dateString);
-      return today > dueDate;
-  };
-
-  // --- EXPORT HISTORY EXCEL ---
+  // --- DATA MANAGEMENT FUNCTIONS ---
   const handleExportHistory = () => {
     if (riwayat.length === 0) return alert("Belum ada data.");
-    const data = riwayat.flatMap(t => t.items.map(item => ({ "ID": t.id, "Tgl": t.tanggal, "Kasir": t.kasir, "Item": item.nama, "Harga": item.hargaEcer, "Qty": item.qty, "Subtotal": item.subtotal, "Total Trx": t.total, "Metode": t.metodePembayaran })));
+    const data = riwayat.flatMap(t => t.items.map(item => ({ "ID": t.id, "Tgl": t.tanggal, "Kasir": t.kasir, "Item": item.nama, "Harga": item.hargaEcer, "Qty": item.qty, "Subtotal": item.subtotal, "Total Trx": t.total })));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Laporan");
     XLSX.writeFile(wb, `Laporan_${new Date().toLocaleDateString('id-ID').replace(/\//g,'-')}.xlsx`);
   };
 
-  // --- EXPORT KASBON EXCEL ---
   const handleExportKasbon = () => {
       if (kasbonList.length === 0) return alert("Belum ada data kasbon.");
-      const data = kasbonList.map(k => ({
-          "ID Transaksi": k.id,
-          "Tanggal": k.tanggal,
-          "Nama Pelanggan": k.namaPelanggan,
-          "Nomor HP": k.nomorHP,
-          "Jatuh Tempo": k.jatuhTempo,
-          "Total Hutang": k.total,
-          "Status": k.status,
-          "Detail Barang": k.items.map(i => `${i.nama} (${i.qty})`).join(', ')
-      }));
+      const data = kasbonList.map(k => ({ "ID": k.id, "Tgl": k.tanggal, "Nama": k.namaPelanggan, "HP": k.nomorHP, "Tempo": k.jatuhTempo, "Total": k.total, "Status": k.status }));
       const ws = XLSX.utils.json_to_sheet(data);
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Data Kasbon");
@@ -332,7 +231,6 @@ const App = () => {
       setShowDeleteHistoryConfirm(null);
   };
 
-  // FIX: FUNGSI HAPUS PRODUK
   const handleDeleteProduk = () => {
       if (deleteTargetId !== null) {
           setProdukList(prev => prev.filter(p => p.id !== deleteTargetId));
@@ -341,6 +239,31 @@ const App = () => {
       }
   };
 
+  const handleDeleteKasbon = () => {
+      if (!showDeleteKasbonConfirm) return;
+      setKasbonList(prev => prev.filter(k => k.id !== showDeleteKasbonConfirm));
+      setShowDeleteKasbonConfirm(null);
+  };
+
+  // --- USER MANAGEMENT FUNCTIONS (FIXED) ---
+  const handleSimpanUser = () => {
+      if (!newUser.username || !newUser.password || !newUser.nama) return alert("Semua data wajib diisi!");
+      const newId = Date.now();
+      setDbUsers(prev => [...prev, { id: newId, ...newUser }]);
+      setNewUser({ username: '', password: '', nama: '', role: 'kasir' });
+      setShowAddUserModal(false);
+      setShowSaveSuccess(true);
+  };
+
+  const handleDeleteUser = () => {
+      if (userToDelete) {
+          setDbUsers(prev => prev.filter(u => u.id !== userToDelete.id));
+          setUserToDelete(null);
+          setShowDeleteUserConfirm(false);
+      }
+  };
+
+  // --- POS FUNCTIONS ---
   const tambahKeKeranjang = (produk: Produk) => {
     if (produk.stok <= 0) return alert("Stok Habis!");
     setKeranjang(prev => {
@@ -381,15 +304,12 @@ const App = () => {
     setTimeout(() => {
         const now = new Date();
         const trxId = `INV-${Date.now()}`;
-        
         const namaPelanggan = metodePembayaran === 'Kasbon' ? namaPelangganKasbon : "";
-
         const trx: HistoryTransaksi = { 
             id: trxId, kasir: currentUser?.nama || 'Unknown', 
             tanggal: now.toLocaleDateString('id-ID'), waktu: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
             items: [...keranjang], subtotal: subtotalMurni, diskon: nilaiDiskon, ppn: nilaiPPN, total: totalAkhir,
-            bayar: nilaiBayar, kembali: nilaiKembalian, metodePembayaran,
-            catatan: namaPelanggan 
+            bayar: nilaiBayar, kembali: nilaiKembalian, metodePembayaran, catatan: namaPelanggan 
         };
 
         if (metodePembayaran === 'Kasbon') {
@@ -416,12 +336,6 @@ const App = () => {
   const handleLunasiKasbon = (id: string) => {
       setKasbonList(prev => prev.map(k => k.id === id ? { ...k, status: 'Lunas' } : k));
       setShowLunasConfirm(null);
-  };
-
-  const handleDeleteKasbon = () => {
-      if (!showDeleteKasbonConfirm) return;
-      setKasbonList(prev => prev.filter(k => k.id !== showDeleteKasbonConfirm));
-      setShowDeleteKasbonConfirm(null);
   };
 
   const handleSimpanProduk = () => {
@@ -494,6 +408,7 @@ const App = () => {
              {activeTab === 'kasbon' && <><BookUser className="text-blue-600"/> Data Kasbon & Penagihan</>}
              {activeTab === 'inventory' && <><LayoutGrid className="text-blue-600"/> Stok Produk</>}
              {activeTab === 'history' && <><History className="text-blue-600"/> Riwayat Transaksi</>}
+             {activeTab === 'users' && <><Users className="text-blue-600"/> Manajemen User</>}
           </h2>
           <div className="flex items-center gap-4">
              <div className="text-right hidden md:block"><p className="text-xs text-slate-400 font-bold uppercase">Login sebagai</p><p className="font-bold text-slate-800">{currentUser?.nama}</p></div>
@@ -589,9 +504,7 @@ const App = () => {
                              {nilaiDiskon > 0 && <div className="flex justify-between text-sm text-red-500"><span>Diskon</span><span>-{nilaiDiskon.toLocaleString()}</span></div>}
                              {ppnAktif && <div className="flex justify-between text-sm text-slate-500"><span>PPN</span><span>+{nilaiPPN.toLocaleString()}</span></div>}
                          </div>
-
                          <div className="flex justify-between text-xl font-black text-slate-800 pt-2 border-t border-slate-200 mt-2"><span>Total</span><span>Rp {totalAkhir.toLocaleString()}</span></div>
-                         
                          <div className="grid grid-cols-3 gap-2">
                             <button onClick={() => setMetodePembayaran('Cash')} className={`py-2 rounded-xl text-xs font-bold border ${metodePembayaran === 'Cash' ? 'bg-green-100 border-green-300 text-green-700' : 'bg-white'}`}>Tunai</button>
                             <button onClick={() => setMetodePembayaran('QRIS')} className={`py-2 rounded-xl text-xs font-bold border ${metodePembayaran === 'QRIS' ? 'bg-blue-100 border-blue-300 text-blue-700' : 'bg-white'}`}>QRIS</button>
@@ -609,7 +522,6 @@ const App = () => {
                                 <div className="bg-white p-2 rounded-xl border border-orange-200 flex items-center gap-2"><Calendar className="text-orange-500" size={18}/><div className="flex-1"><p className="text-[10px] text-slate-400 font-bold uppercase">Jatuh Tempo</p><input type="date" className="w-full font-bold text-sm outline-none" value={jatuhTempoKasbon} onChange={(e) => setJatuhTempoKasbon(e.target.value)} /></div></div>
                             </div>
                          )}
-                         
                          <button onClick={handleBayarClick} disabled={keranjang.length === 0} className={`w-full text-white py-4 rounded-xl font-bold text-lg shadow-lg flex justify-center items-center gap-2 transition-all ${getButtonBayarClass()}`}>
                             {metodePembayaran === 'Kasbon' ? 'Simpan Hutang' : 'Bayar Sekarang'} <ArrowRight size={20}/>
                          </button>
@@ -638,63 +550,28 @@ const App = () => {
                 <div className="overflow-x-auto">
                     <table className="w-full text-left text-sm text-slate-600">
                         <thead className="bg-slate-50 text-slate-400 uppercase font-bold text-xs">
-                            <tr>
-                                <th className="p-6">Tgl & ID</th>
-                                <th className="p-6">Pelanggan</th>
-                                <th className="p-6">Jatuh Tempo</th>
-                                <th className="p-6">Tagihan</th>
-                                <th className="p-6">Status</th>
-                                <th className="p-6 text-center">Aksi</th>
-                            </tr>
+                            <tr><th className="p-6">Tgl & ID</th><th className="p-6">Pelanggan</th><th className="p-6">Tagihan</th><th className="p-6">Status</th><th className="p-6 text-center">Aksi</th></tr>
                         </thead>
                         <tbody>
-                            {kasbonList.length === 0 ? (
-                                <tr><td colSpan={6} className="p-8 text-center text-slate-400">Tidak ada data kasbon.</td></tr>
-                            ) : kasbonList.map(k => {
-                                const isOverdue = k.status === 'Belum Lunas' && checkIsOverdue(k.jatuhTempo);
-                                return (
+                            {kasbonList.length === 0 ? (<tr><td colSpan={5} className="p-8 text-center text-slate-400">Tidak ada data kasbon.</td></tr>) : kasbonList.map(k => (
                                 <tr key={k.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
                                     <td className="p-6"><div className="font-mono text-xs font-bold text-slate-500">{k.id}</div><div className="text-xs text-slate-400 mt-1">{k.tanggal}</div></td>
-                                    <td className="p-6">
-                                        <div className="font-bold text-slate-800 text-base">{k.namaPelanggan}</div>
-                                        <div className="text-xs text-slate-500 flex items-center gap-1"><Phone size={10}/> {k.nomorHP || "-"}</div>
-                                    </td>
-                                    <td className="p-6">
-                                        <div className={`font-bold text-xs flex items-center gap-1 ${isOverdue ? 'text-red-600' : 'text-slate-600'}`}>
-                                            <Calendar size={14}/> {new Date(k.jatuhTempo).toLocaleDateString('id-ID')}
-                                        </div>
-                                        {isOverdue && <span className="text-[10px] bg-red-100 text-red-600 px-2 rounded-full font-bold mt-1 inline-block">LEWAT JATUH TEMPO</span>}
-                                    </td>
+                                    <td className="p-6"><div className="font-bold text-slate-800 text-base">{k.namaPelanggan}</div><div className="text-xs text-slate-500 flex items-center gap-1"><Phone size={10}/> {k.nomorHP || "-"}</div></td>
                                     <td className="p-6 font-black text-slate-700">Rp {k.total.toLocaleString()}</td>
-                                    <td className="p-6">
-                                        {k.status === 'Lunas' ? (
-                                            <span className="bg-green-100 text-green-600 px-3 py-1 rounded-full text-xs font-black flex items-center gap-1 w-fit"><CheckCircle2 size={12}/> LUNAS</span>
-                                        ) : (
-                                            <span className="bg-red-100 text-red-600 px-3 py-1 rounded-full text-xs font-black flex items-center gap-1 w-fit"><AlertTriangle size={12}/> BELUM LUNAS</span>
-                                        )}
-                                    </td>
+                                    <td className="p-6">{k.status === 'Lunas' ? (<span className="bg-green-100 text-green-600 px-3 py-1 rounded-full text-xs font-black flex items-center gap-1 w-fit"><CheckCircle2 size={12}/> LUNAS</span>) : (<span className="bg-red-100 text-red-600 px-3 py-1 rounded-full text-xs font-black flex items-center gap-1 w-fit"><AlertTriangle size={12}/> BELUM LUNAS</span>)}</td>
                                     <td className="p-6 flex justify-center gap-2">
-                                        {k.status === 'Belum Lunas' && (
-                                            <>
-                                                <button onClick={() => handleTagihHutangWA(k)} className="bg-green-100 hover:bg-green-200 text-green-700 p-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1" title="Kirim Tagihan WA"><MessageCircle size={16}/> Tagih WA</button>
-                                                <button onClick={() => setShowLunasConfirm({ id: k.id, nama: k.namaPelanggan })} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-md transition-all">Lunasi</button>
-                                            </>
-                                        )}
-                                        {k.status === 'Lunas' && (
-                                            <button onClick={() => setShowDeleteKasbonConfirm(k.id)} className="bg-red-100 hover:bg-red-200 text-red-600 p-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1" title="Hapus Data">
-                                                <Trash2 size={16}/> Hapus
-                                            </button>
-                                        )}
+                                        {k.status === 'Belum Lunas' && (<><button onClick={() => handleTagihHutangWA(k)} className="bg-green-100 hover:bg-green-200 text-green-700 p-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1" title="Kirim Tagihan WA"><MessageCircle size={16}/> Tagih</button><button onClick={() => setShowLunasConfirm({ id: k.id, nama: k.namaPelanggan })} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-md transition-all">Lunasi</button></>)}
+                                        {k.status === 'Lunas' && (<button onClick={() => setShowDeleteKasbonConfirm(k.id)} className="bg-red-100 hover:bg-red-200 text-red-600 p-2 rounded-lg text-xs font-bold transition-all flex items-center gap-1" title="Hapus Data"><Trash2 size={16}/> Hapus</button>)}
                                     </td>
                                 </tr>
-                            )})}
+                            ))}
                         </tbody>
                     </table>
                 </div>
              </div>
           )}
 
-          {/* --- INVENTORY & HISTORY & USERS --- */}
+          {/* --- INVENTORY --- */}
           {activeTab === 'inventory' && currentUser?.role === 'admin' && (
              <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center">
@@ -718,6 +595,7 @@ const App = () => {
              </div>
           )}
 
+          {/* --- RIWAYAT --- */}
           {activeTab === 'history' && (
              <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center">
@@ -728,18 +606,14 @@ const App = () => {
                     <table className="w-full text-left text-sm text-slate-600">
                         <thead className="bg-slate-50 text-slate-400 uppercase font-bold text-xs"><tr><th className="p-4 pl-6">ID & Tgl</th><th className="p-4">Total</th><th className="p-4 text-center">Aksi</th></tr></thead>
                         <tbody>
-                            {riwayat.length === 0 ? (
-                                <tr><td colSpan={3} className="p-8 text-center text-slate-400">Belum ada riwayat transaksi.</td></tr>
-                            ) : riwayat.map((trx) => (
+                            {riwayat.length === 0 ? (<tr><td colSpan={3} className="p-8 text-center text-slate-400">Belum ada riwayat transaksi.</td></tr>) : riwayat.map((trx) => (
                                 <tr key={trx.id} className="border-b border-slate-50 hover:bg-slate-50">
                                     <td className="p-4 pl-6"><div className="font-mono text-xs font-bold text-slate-500">{trx.id}</div><div className="text-[10px] text-slate-400">{trx.tanggal}</div></td>
                                     <td className="p-4 font-black text-slate-700">Rp {trx.total.toLocaleString()}</td>
                                     <td className="p-4 flex justify-center gap-2">
                                         <button onClick={() => handlePrintStruk(trx)} className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200" title="Print Struk"><Printer size={16}/></button>
                                         <button onClick={() => handleKirimWA(trx)} className="p-2 bg-green-100 text-green-600 rounded-lg hover:bg-green-200" title="Kirim WA"><MessageCircle size={16}/></button>
-                                        {currentUser?.role === 'admin' && (
-                                            <button onClick={() => setShowDeleteHistoryConfirm(trx.id)} className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200" title="Hapus Riwayat"><Trash2 size={16}/></button>
-                                        )}
+                                        {currentUser?.role === 'admin' && (<button onClick={() => setShowDeleteHistoryConfirm(trx.id)} className="p-2 bg-red-100 text-red-600 rounded-lg hover:bg-red-200" title="Hapus Riwayat"><Trash2 size={16}/></button>)}
                                     </td>
                                 </tr>
                             ))}
@@ -749,17 +623,24 @@ const App = () => {
              </div>
           )}
           
+           {/* --- USERS MANAGEMENT (FIXED) --- */}
            {activeTab === 'users' && currentUser?.role === 'admin' && (
              <div className="bg-white rounded-[2rem] shadow-sm border border-slate-100 overflow-hidden max-w-4xl mx-auto">
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center">
-                    <h3 className="font-bold text-slate-700 flex items-center gap-2"><Users size={20} className="text-blue-500"/> User</h3>
-                    <button onClick={() => setShowAddUserModal(true)} className="bg-slate-800 text-white px-5 py-3 rounded-xl font-bold shadow-lg flex items-center gap-2"><UserPlus size={18}/> Tambah</button>
+                    <h3 className="font-bold text-slate-700 flex items-center gap-2"><Users size={20} className="text-blue-500"/> User Management</h3>
+                    <button onClick={() => setShowAddUserModal(true)} className="bg-slate-800 text-white px-5 py-3 rounded-xl font-bold shadow-lg flex items-center gap-2"><UserPlus size={18}/> Tambah User</button>
                 </div>
                 <div className="p-6 grid gap-4">
                     {dbUsers.map(u => (
                         <div key={u.id} className="flex items-center justify-between p-4 border border-slate-100 rounded-2xl bg-slate-50">
-                            <div className="flex items-center gap-4"><div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-bold">{u.nama.charAt(0)}</div><div><h4 className="font-bold text-slate-800">{u.nama}</h4><p className="text-xs text-slate-500">@{u.username}</p></div></div>
-                            {u.id !== currentUser.id && <button onClick={() => {setUserToDelete({id:u.id, nama:u.nama}); setShowDeleteUserConfirm(true);}} className="text-red-400 hover:text-red-600 p-2"><Trash2 size={20}/></button>}
+                            <div className="flex items-center gap-4">
+                                <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-white ${u.role === 'admin' ? 'bg-blue-600' : 'bg-slate-400'}`}>{u.nama.charAt(0)}</div>
+                                <div><h4 className="font-bold text-slate-800">{u.nama} <span className="text-[10px] bg-slate-200 px-2 py-0.5 rounded-full uppercase text-slate-500">{u.role}</span></h4><p className="text-xs text-slate-500">@{u.username}</p></div>
+                            </div>
+                            {/* PROTEKSI: TIDAK BISA HAPUS DIRI SENDIRI */}
+                            {u.id !== currentUser.id && (
+                                <button onClick={() => {setUserToDelete({id:u.id, nama:u.nama}); setShowDeleteUserConfirm(true);}} className="text-red-400 hover:bg-red-50 hover:text-red-600 p-2 rounded-lg transition-all"><Trash2 size={20}/></button>
+                            )}
                         </div>
                     ))}
                 </div>
@@ -768,7 +649,7 @@ const App = () => {
         </div>
       </main>
 
-      {/* --- MODALS (ALERTS & POPUPS) --- */}
+      {/* --- MODALS (POPUP) --- */}
       {showKasbonWarning && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[80] flex items-center justify-center p-4">
             <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-sm w-full text-center animate-pop-in">
@@ -806,13 +687,12 @@ const App = () => {
           </div>
       )}
 
-      {/* FIX: MODAL KONFIRMASI HAPUS PRODUK YANG SEBELUMNYA HILANG */}
       {showDeleteConfirm && (
           <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
               <div className="bg-white p-6 rounded-2xl shadow-xl max-w-sm w-full text-center animate-pop-in">
                   <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4"><Trash2 size={32}/></div>
                   <h3 className="font-bold text-lg mb-2">Hapus Produk?</h3>
-                  <p className="text-slate-500 text-sm mb-6">Produk akan dihapus permanen dari daftar.</p>
+                  <p className="text-slate-500 text-sm mb-6">Produk akan dihapus permanen.</p>
                   <div className="flex gap-3">
                       <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 bg-slate-100 py-3 rounded-xl font-bold">Batal</button>
                       <button onClick={handleDeleteProduk} className="flex-1 bg-red-600 text-white py-3 rounded-xl font-bold">Hapus</button>
@@ -847,6 +727,47 @@ const App = () => {
                   </div>
               </div>
           </div>
+      )}
+
+      {/* --- MODAL BARU: HAPUS USER --- */}
+      {showDeleteUserConfirm && userToDelete && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <div className="bg-white p-6 rounded-2xl shadow-xl max-w-sm w-full text-center animate-pop-in">
+                  <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4"><Trash2 size={32}/></div>
+                  <h3 className="font-bold text-lg mb-2">Hapus User?</h3>
+                  <p className="text-slate-500 text-sm mb-6">Akun <b>{userToDelete.nama}</b> akan dihapus dan tidak bisa login lagi.</p>
+                  <div className="flex gap-3">
+                      <button onClick={() => setShowDeleteUserConfirm(false)} className="flex-1 bg-slate-100 py-3 rounded-xl font-bold">Batal</button>
+                      <button onClick={handleDeleteUser} className="flex-1 bg-red-600 text-white py-3 rounded-xl font-bold">Hapus</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* --- MODAL BARU: TAMBAH USER --- */}
+      {showAddUserModal && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white p-6 rounded-3xl shadow-2xl max-w-sm w-full space-y-3">
+                <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-bold text-xl">Tambah User Baru</h3>
+                    <button onClick={() => setShowAddUserModal(false)}><X size={20} className="text-slate-400"/></button>
+                </div>
+                <input type="text" className="w-full bg-slate-50 p-3 rounded-xl border font-bold" value={newUser.nama} onChange={(e) => setNewUser({...newUser, nama: e.target.value})} placeholder="Nama Lengkap"/>
+                <input type="text" className="w-full bg-slate-50 p-3 rounded-xl border font-bold" value={newUser.username} onChange={(e) => setNewUser({...newUser, username: e.target.value})} placeholder="Username Login"/>
+                <input type="password" className="w-full bg-slate-50 p-3 rounded-xl border font-bold" value={newUser.password} onChange={(e) => setNewUser({...newUser, password: e.target.value})} placeholder="Password"/>
+                <div className="bg-slate-50 p-3 rounded-xl border">
+                    <label className="text-xs font-bold text-slate-400 block mb-2">Pilih Role:</label>
+                    <div className="flex gap-2">
+                        <button onClick={() => setNewUser({...newUser, role: 'admin'})} className={`flex-1 py-2 rounded-lg text-sm font-bold ${newUser.role === 'admin' ? 'bg-blue-600 text-white' : 'bg-white border'}`}>Admin</button>
+                        <button onClick={() => setNewUser({...newUser, role: 'kasir'})} className={`flex-1 py-2 rounded-lg text-sm font-bold ${newUser.role === 'kasir' ? 'bg-blue-600 text-white' : 'bg-white border'}`}>Kasir</button>
+                    </div>
+                </div>
+                <div className="flex gap-3 mt-4">
+                    <button onClick={() => setShowAddUserModal(false)} className="flex-1 bg-slate-100 py-3 rounded-xl font-bold">Batal</button>
+                    <button onClick={handleSimpanUser} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold">Simpan</button>
+                </div>
+            </div>
+        </div>
       )}
       
       {showSuccess && (

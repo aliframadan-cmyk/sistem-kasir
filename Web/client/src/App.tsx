@@ -2,11 +2,10 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { 
   LayoutGrid, ShoppingCart, History, Search, LayoutDashboard,
-  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, UserCircle, KeyRound, Settings, Users, UserPlus, XCircle, UserCheck, AlertTriangle, Minus, Plus, Download, AlertOctagon, MessageCircle
+  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, UserCircle, KeyRound, Settings, Users, UserPlus, XCircle, UserCheck, AlertTriangle, Minus, Plus, Download, AlertOctagon, MessageCircle, FileText
 } from 'lucide-react';
 
-// --- KONFIGURASI TOKO (BARU) ---
-// GANTI LINK INI dengan link gambar logomu sendiri nanti.
+// --- KONFIGURASI TOKO ---
 const LOGO_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT_beJfa1EtbhzGt4z7dcWZM2EDGfwtCMZ3Pg&s"; 
 const NAMA_TOKO = "TOKO SUDAR";
 
@@ -27,10 +26,19 @@ const DEFAULT_USERS = [
   { id: 2, username: 'kasir', password: '123', role: 'kasir', nama: 'Kasir Utama' },
 ];
 
-// --- Interfaces ---
+// --- Interfaces (UPDATED: Added subtotal & ppn to History) ---
 interface Produk { id: number; nama: string; kategori: string; stok: number; hargaEcer: number; barcode: string; }
 interface ItemKeranjang extends Produk { qty: number; subtotal: number; }
-interface HistoryTransaksi { id: string; kasir: string; tanggal: string; waktu: string; items: ItemKeranjang[]; total: number; }
+interface HistoryTransaksi { 
+    id: string; 
+    kasir: string; 
+    tanggal: string; 
+    waktu: string; 
+    items: ItemKeranjang[]; 
+    subtotal: number; // BARU: Simpan subtotal murni
+    ppn: number;      // BARU: Simpan nilai pajak
+    total: number;    // Total akhir (Subtotal + PPN)
+}
 interface UserSession { id: number; username: string; role: 'admin' | 'kasir'; nama: string; }
 interface UserData { id: number; username: string; password: string; role: string; nama: string; }
 
@@ -80,6 +88,9 @@ const App = () => {
   const [selectedCategory, setSelectedCategory] = useState("Semua");
   const [barcodeInput, setBarcodeInput] = useState("");
   
+  // --- STATE BARU: PPN ---
+  const [ppnAktif, setPpnAktif] = useState(false);
+
   // UI States
   const [showEmptyWarning, setShowEmptyWarning] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false); 
@@ -97,8 +108,14 @@ const App = () => {
 
   const barcodeInputRef = useRef<HTMLInputElement>(null);
 
-  // --- CALCULATIONS ---
-  const totalBayar = useMemo(() => keranjang.reduce((a, b) => a + b.subtotal, 0), [keranjang]);
+  // --- CALCULATIONS (UPDATED FOR PPN) ---
+  const subtotalMurni = useMemo(() => keranjang.reduce((a, b) => a + b.subtotal, 0), [keranjang]);
+  
+  const nilaiPPN = useMemo(() => {
+    return ppnAktif ? Math.round(subtotalMurni * 0.11) : 0;
+  }, [ppnAktif, subtotalMurni]);
+
+  const totalAkhir = subtotalMurni + nilaiPPN;
 
   const uniqueCategories = useMemo(() => {
     return ['Semua', ...new Set(produkList.map(item => item.kategori))];
@@ -146,10 +163,11 @@ const App = () => {
   const handleLogout = () => {
     setCurrentUser(null);
     setKeranjang([]); 
+    setPpnAktif(false); // Reset PPN saat logout
     setShowPassSuccess(false);
   };
 
-  // --- LOGIKA KIRIM WHATSAPP (FITUR BARU) ---
+  // --- LOGIKA KIRIM WHATSAPP (UPDATED WITH PPN) ---
   const handleKirimWA = (trx: HistoryTransaksi) => {
     let pesan = `*STRUK BELANJA - ${NAMA_TOKO}*\n`;
     pesan += `No: ${trx.id}\n`;
@@ -161,6 +179,10 @@ const App = () => {
         pesan += `${item.qty} x ${item.hargaEcer.toLocaleString()} = ${item.subtotal.toLocaleString()}\n`;
     });
     pesan += `--------------------------------\n`;
+    pesan += `Subtotal: Rp ${trx.subtotal.toLocaleString()}\n`;
+    if (trx.ppn > 0) {
+        pesan += `PPN (11%): Rp ${trx.ppn.toLocaleString()}\n`;
+    }
     pesan += `*TOTAL BAYAR: Rp ${trx.total.toLocaleString()}*\n`;
     pesan += `--------------------------------\n`;
     pesan += `Terima Kasih sudah berbelanja! 🙏`;
@@ -214,7 +236,7 @@ const App = () => {
     setShowPassSuccess(true);
   };
 
-  // --- LOGIKA EXPORT EXCEL ---
+  // --- LOGIKA EXPORT EXCEL (UPDATED WITH PPN) ---
   const handleExportExcel = () => {
     if (riwayat.length === 0) return alert("Belum ada data transaksi untuk diexport.");
     const dataUntukExcel = riwayat.map(trx => ({
@@ -223,10 +245,12 @@ const App = () => {
         "Waktu": trx.waktu,
         "Kasir": trx.kasir,
         "Detail Barang": trx.items.map(item => `${item.nama} (${item.qty})`).join(", "),
+        "Subtotal": trx.subtotal,
+        "PPN (11%)": trx.ppn,
         "Total Bayar": trx.total
     }));
     const worksheet = XLSX.utils.json_to_sheet(dataUntukExcel);
-    const wscols = [{wch: 20}, {wch: 15}, {wch: 10}, {wch: 15}, {wch: 50}, {wch: 15}];
+    const wscols = [{wch: 20}, {wch: 15}, {wch: 10}, {wch: 15}, {wch: 50}, {wch: 15}, {wch: 15}, {wch: 15}];
     worksheet['!cols'] = wscols;
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Laporan Penjualan");
@@ -276,7 +300,9 @@ const App = () => {
             tanggal: now.toLocaleDateString('id-ID'), 
             waktu: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
             items: [...keranjang],
-            total: totalBayar 
+            subtotal: subtotalMurni,
+            ppn: nilaiPPN,
+            total: totalAkhir // Total sudah termasuk PPN
         };
         setRiwayat(prev => [trx, ...prev]); 
         setProdukList(prevList => prevList.map(p => { 
@@ -285,6 +311,7 @@ const App = () => {
         }));
         setLastTrx(trx);
         setKeranjang([]);
+        setPpnAktif(false); // Reset PPN setelah bayar
         setIsLoading(false);
         setShowSuccess(true);
     }, 800);
@@ -359,10 +386,10 @@ const App = () => {
         @media print { body * { visibility: hidden; } #struk-print, #struk-print * { visibility: visible; } #struk-print { display: block !important; position: absolute; left: 0; top: 0; width: 100%; } @page { margin: 0; size: auto; } }
       `}</style>
 
-      {/* STRUK PRINT (DENGAN LOGO) */}
+      {/* STRUK PRINT (DENGAN LOGO & PPN) */}
       <div id="struk-print" className="hidden font-mono text-sm max-w-[80mm] mx-auto bg-white p-4">
         {lastTrx && <div className="text-center">
-            {/* LOGO DI STRUK (GRAYSCALE HEMAT TINTA) */}
+            {/* LOGO DI STRUK */}
             <img src={LOGO_URL} alt="Logo" className="w-16 h-16 mx-auto mb-2 object-contain grayscale" />
             <h2 className="font-bold text-lg">{NAMA_TOKO}</h2>
             <p className="text-xs">{lastTrx.tanggal} {lastTrx.waktu}</p>
@@ -371,7 +398,10 @@ const App = () => {
             <hr className="border-dashed border-black my-2"/>
             <div className="text-left">{lastTrx.items.map(i => (<div key={i.id} className="flex justify-between"><span>{i.nama} <span className="text-[10px]"><br/>{i.qty} x {i.hargaEcer.toLocaleString()}</span></span><span>{i.subtotal.toLocaleString()}</span></div>))}</div>
             <hr className="border-dashed border-black my-2"/>
-            <div className="flex justify-between font-bold text-lg"><span>TOTAL</span><span>Rp {lastTrx.total.toLocaleString()}</span></div>
+            {/* Rincian PPN di Struk */}
+            <div className="flex justify-between text-xs"><span>Subtotal</span><span>{lastTrx.subtotal.toLocaleString()}</span></div>
+            {lastTrx.ppn > 0 && <div className="flex justify-between text-xs"><span>PPN (11%)</span><span>+{lastTrx.ppn.toLocaleString()}</span></div>}
+            <div className="flex justify-between font-bold text-lg border-t border-black mt-1 pt-1"><span>TOTAL</span><span>Rp {lastTrx.total.toLocaleString()}</span></div>
             <p className="text-center text-xs mt-4">Terima Kasih</p>
         </div>}
       </div>
@@ -491,119 +521,285 @@ const App = () => {
               <div className="bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm">
                 <table className="w-full text-left">
                   <thead className="bg-slate-50 text-slate-400 text-[11px] uppercase font-bold tracking-widest"><tr><th className="px-6 py-5">Barang</th><th className="px-6 py-5 text-center">Stok</th><th className="px-6 py-5 text-right">Harga</th><th className="px-6 py-5 text-center">Aksi</th></tr></thead>
-                  <tbody className="divide-y divide-slate-50">{produkList.map(p => (<tr key={p.id} className="hover:bg-slate-50 transition-colors"><td className="px-6 py-5 font-bold text-slate-700">{p.nama} <br/><span className="text-[10px] text-slate-400 font-normal uppercase">{p.kategori}</span></td><td className={`px-6 py-5 text-center font-bold ${p.stok <= 5 ? 'text-red-500' : 'text-blue-600'}`}>{p.stok}</td><td className="px-6 py-5 text-right font-black">Rp {p.hargaEcer.toLocaleString('id-ID')}</td><td className="px-6 py-5 text-center flex justify-center gap-2"><button onClick={() => { setEditId(p.id); setNewItem({name:p.nama,category:p.kategori,stockPcs:p.stok.toString(),pricePcs:p.hargaEcer.toString(),barcode:p.barcode}); setShowAddModal(true); }} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"><Edit size={18}/></button><button onClick={() => clickHapusProduk(p.id)} className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100"><Trash2 size={18}/></button></td></tr>))}</tbody>
+                  <tbody className="divide-y divide-slate-50">
+                    {produkList.map(p => (
+                      <tr key={p.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="px-6 py-4"><div className="font-bold text-slate-700">{p.nama}</div><div className="text-[10px] text-slate-400 uppercase tracking-wider mt-1">{p.kategori} • {p.barcode}</div></td>
+                        <td className={`px-6 text-center font-bold ${p.stok < 5 ? 'text-red-500' : 'text-green-600'}`}>{p.stok}</td>
+                        <td className="px-6 text-right font-black text-slate-700">Rp {p.hargaEcer.toLocaleString()}</td>
+                        <td className="px-6 text-center"><button onClick={() => { setEditId(p.id); setNewItem({name:p.nama, category:p.kategori, stockPcs:p.stok.toString(), pricePcs:p.hargaEcer.toString(), barcode:p.barcode}); setShowAddModal(true); }} className="text-blue-600 p-2 hover:bg-blue-50 rounded-lg transition-colors"><Edit size={18}/></button><button onClick={() => clickHapusProduk(p.id)} className="text-red-500 p-2 hover:bg-red-50 rounded-lg transition-colors ml-2"><Trash2 size={18}/></button></td>
+                      </tr>
+                    ))}
+                  </tbody>
                 </table>
               </div>
             </div>
           )}
 
-          {/* USERS TAB */}
+          {/* HISTORY TAB */}
+          {activeTab === 'history' && (
+            <div className="space-y-4 max-w-4xl">
+              <div className="flex justify-between items-center">
+                  <button onClick={handleExportExcel} className="bg-green-600 text-white font-bold py-2 px-4 rounded-xl flex gap-2 shadow-lg shadow-green-200 hover:bg-green-700 transition-all"><Download size={20}/> Download Excel</button>
+                  {currentUser.role === 'admin' && <button onClick={hapusSemuaRiwayat} className="text-red-500 font-bold flex gap-2 items-center hover:bg-red-50 px-4 py-2 rounded-xl transition-all"><Eraser size={16}/> Bersihkan Riwayat</button>}
+              </div>
+              {riwayat.map(h => (
+                <div key={h.id} className="bg-white p-6 rounded-2xl border border-slate-100 flex justify-between items-center shadow-sm hover:shadow-md transition-all">
+                  <div className="flex items-center gap-4">
+                    <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><ReceiptText/></div>
+                    <div>
+                        <p className="font-bold text-lg text-slate-800">{h.id}</p>
+                        <p className="text-sm text-slate-400">{h.tanggal} • {h.waktu}</p>
+                        <div className="flex gap-2 mt-1">
+                            <span className="text-[10px] bg-slate-100 px-2 rounded text-slate-500 font-bold">Item: {h.items.length}</span>
+                            <span className="text-[10px] bg-slate-100 px-2 rounded text-slate-500 font-bold">Kasir: {h.kasir}</span>
+                            {/* INDIKATOR PPN DI LIST */}
+                            {h.ppn > 0 && <span className="text-[10px] bg-orange-100 text-orange-600 px-2 rounded font-bold">PPN 11%</span>}
+                        </div>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-black text-blue-600 text-xl">Rp {h.total.toLocaleString()}</p>
+                    <div className="flex gap-2 justify-end mt-2">
+                        <button onClick={() => { setLastTrx(h); setTimeout(() => window.print(), 100); }} className="bg-slate-100 p-2 rounded-lg text-slate-600 hover:bg-blue-100 hover:text-blue-600 transition-colors"><Printer size={16}/></button>
+                        <button onClick={() => handleKirimWA(h)} className="bg-green-50 p-2 rounded-lg text-green-600 hover:bg-green-100 transition-colors"><MessageCircle size={16}/></button>
+                        {currentUser.role === 'admin' && <button onClick={() => clickHapusSatuRiwayat(h.id)} className="bg-red-50 p-2 rounded-lg text-red-500 hover:bg-red-100 transition-colors"><Trash2 size={16}/></button>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {riwayat.length === 0 && <div className="text-center text-slate-400 py-10">Belum ada riwayat transaksi.</div>}
+            </div>
+          )}
+
+          {/* USERS TAB (ADMIN ONLY) */}
           {activeTab === 'users' && currentUser.role === 'admin' && (
             <div className="max-w-4xl mx-auto">
                 <div className="flex justify-between items-end mb-8">
-                    <div><h2 className="text-xl font-bold text-slate-700">Daftar Akun</h2><p className="text-sm text-slate-400">Kelola akses masuk staf dan admin.</p></div>
-                    <button onClick={() => setShowAddUserModal(true)} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-blue-200 transition-all"><UserPlus size={20}/> Tambah Akun</button>
+                    <div><h2 className="text-xl font-bold text-slate-700">Daftar Pengguna</h2><p className="text-slate-400 text-sm">Kelola akses staff toko.</p></div>
+                    <button onClick={() => setShowAddUserModal(true)} className="bg-blue-600 text-white px-6 py-3 rounded-xl font-bold flex gap-2 shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all"><UserPlus size={20}/> Tambah User</button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {dbUsers.map(user => (
-                        <div key={user.id} className="bg-white p-6 rounded-2xl border border-slate-100 hover:shadow-lg transition-all relative overflow-hidden group">
-                            {user.role === 'admin' && <div className="absolute top-0 right-0 bg-purple-100 text-purple-600 text-[10px] font-bold px-3 py-1 rounded-bl-xl">ADMIN</div>}
-                            <div className="flex items-center gap-4"><div className={`w-14 h-14 rounded-full flex items-center justify-center text-xl font-bold ${user.role === 'admin' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>{user.nama.charAt(0).toUpperCase()}</div><div><h3 className="font-bold text-slate-800 text-lg">{user.nama}</h3><p className="text-slate-400 text-sm">@{user.username}</p></div></div>
-                            <div className="mt-6 flex justify-between items-center border-t border-dashed border-slate-100 pt-4">
-                                <span className="text-xs font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded">Pass: ••••••</span>
-                                {user.id !== currentUser.id && (<button type="button" onClick={(e) => { e.stopPropagation(); clickDeleteUser(user.id, user.nama); }} className="text-red-500 hover:text-white bg-red-50 hover:bg-red-500 p-2 rounded-lg transition-all border border-red-100" title="Hapus User"><Trash2 size={18}/></button>)}
-                                {user.id === currentUser.id && <span className="text-xs text-green-500 font-bold bg-green-50 px-2 py-1 rounded">Aktif (Saya)</span>}
+                    {dbUsers.map(u => (
+                        <div key={u.id} className="bg-white p-6 rounded-2xl border border-slate-100 relative hover:shadow-lg transition-all">
+                            <div className="flex gap-4 items-center">
+                                <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-xl ${u.role === 'admin' ? 'bg-purple-100 text-purple-600' : 'bg-green-100 text-green-600'}`}>{u.nama[0]}</div>
+                                <div><h3 className="font-bold text-slate-800">{u.nama}</h3><p className="text-sm text-slate-400">@{u.username}</p></div>
+                            </div>
+                            <div className="mt-4 pt-4 border-t border-slate-50 flex justify-between items-center">
+                                <span className={`text-xs px-2 py-1 rounded uppercase font-bold ${u.role === 'admin' ? 'bg-purple-50 text-purple-600' : 'bg-green-50 text-green-600'}`}>{u.role}</span>
+                                {u.id !== currentUser.id && <button onClick={() => clickDeleteUser(u.id, u.nama)} className="text-red-500 bg-red-50 p-2 rounded hover:bg-red-100 transition-colors"><Trash2 size={16}/></button>}
                             </div>
                         </div>
                     ))}
                 </div>
             </div>
           )}
-
-          {/* HISTORY TAB */}
-          {activeTab === 'history' && (
-            <div className="space-y-4 max-w-4xl pb-10">
-              <div className="flex justify-between items-center mb-6">
-                <button onClick={handleExportExcel} className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-xl flex items-center gap-2 shadow-lg shadow-green-200 transition-all active:scale-95"><Download size={20}/> Download Excel</button>
-                {currentUser.role === 'admin' && riwayat.length > 0 && <button onClick={hapusSemuaRiwayat} className="text-red-500 text-sm font-bold flex items-center gap-2 hover:bg-red-50 px-4 py-2 rounded-lg"><Eraser size={16}/> Hapus Semua</button>}
-              </div>
-              
-              {riwayat.length === 0 && <div className="text-center text-slate-400 mt-10">Belum ada transaksi.</div>}
-
-              {riwayat.map(h => (
-                <div key={h.id} className="bg-white p-6 rounded-2xl border border-slate-100 flex justify-between items-center shadow-sm hover:shadow-md transition-all">
-                    <div className="flex items-center gap-5">
-                        <div className="p-4 bg-blue-50 text-blue-600 rounded-2xl"><ReceiptText/></div>
-                        <div>
-                            <p className="font-bold text-slate-800 text-lg">{h.id}</p>
-                            <p className="text-sm text-slate-400 font-medium">{h.tanggal} - {h.waktu} <span className="ml-2 text-slate-300">|</span> <span className="ml-2 text-blue-500 font-bold">{h.kasir}</span></p>
-                            <span className="text-[10px] bg-slate-100 px-2 py-0.5 rounded text-slate-500 mt-1 inline-block">Item: {h.items.length}</span>
-                        </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-2">
-                        <p className="font-black text-blue-600 text-xl">Rp {h.total.toLocaleString('id-ID')}</p>
-                        <div className="flex gap-2">
-                            <button onClick={() => { setLastTrx(h); setTimeout(() => window.print(), 100); }} className="text-xs font-bold bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-600 px-3 py-2 rounded-lg flex items-center gap-1 transition-all"><Printer size={14}/> Cetak</button>
-                            <button onClick={() => handleKirimWA(h)} className="text-xs font-bold bg-green-50 hover:bg-green-100 text-green-600 hover:text-green-700 px-3 py-2 rounded-lg flex items-center gap-1 transition-all"><MessageCircle size={14}/> WA</button>
-                            {currentUser.role === 'admin' && (
-                                <button onClick={() => clickHapusSatuRiwayat(h.id)} className="text-xs font-bold bg-red-50 hover:bg-red-100 text-red-500 px-3 py-2 rounded-lg flex items-center gap-1 transition-all"><Trash2 size={14}/> Hapus</button>
-                            )}
-                        </div>
-                    </div>
-                </div>
-              ))}
-            </div>
-          )}
         </main>
 
-        {/* KERANJANG (HANYA DI POS) */}
+        {/* CART SIDEBAR (POS ONLY) */}
         {activeTab === 'pos' && (
-          <aside className="w-[400px] bg-white border-l border-slate-100 p-8 flex flex-col shadow-2xl z-30">
-            <h2 className="text-2xl font-black text-slate-800 mb-6 flex items-center gap-3"><ShoppingCart className="text-blue-600" size={28}/> Pesanan</h2>
-            <div className="flex-1 overflow-y-auto space-y-4 pr-2 scrollbar-thin mb-4">
-              {keranjang.length === 0 && <div className="text-center text-slate-400 mt-20">Keranjang Kosong.</div>}
-              {keranjang.map(item => (
-                <div key={item.id} className="flex justify-between items-start bg-slate-50 p-4 rounded-2xl border border-transparent hover:border-blue-200 transition-all">
-                    <div>
-                        <p className="font-bold text-sm text-slate-700 line-clamp-1">{item.nama}</p>
-                        <p className="text-[10px] text-slate-400 mb-2">@ {item.hargaEcer.toLocaleString()}</p>
-                        <div className="flex items-center gap-3">
-                            <button onClick={() => kurangiQty(item.id)} className="w-6 h-6 rounded flex items-center justify-center bg-white border border-slate-300 text-slate-600 hover:bg-red-50 hover:text-red-500 hover:border-red-200 shadow-sm transition-all"><Minus size={12}/></button>
-                            <span className="text-sm font-bold w-4 text-center">{item.qty}</span>
-                            <button onClick={() => tambahKeKeranjang(item)} className="w-6 h-6 rounded flex items-center justify-center bg-white border border-slate-300 text-slate-600 hover:bg-blue-50 hover:text-blue-500 hover:border-blue-200 shadow-sm transition-all"><Plus size={12}/></button>
-                        </div>
+            <aside className="w-[400px] bg-white border-l border-slate-200 p-8 flex flex-col shadow-2xl z-30">
+              <h2 className="text-2xl font-black mb-6 flex items-center gap-2 text-slate-800"><ShoppingCart className="text-blue-600"/> Pesanan</h2>
+              
+              <div className="flex-1 overflow-y-auto space-y-4 scrollbar-hide pr-2">
+                  {keranjang.length === 0 && <div className="text-center text-slate-400 mt-20 flex flex-col items-center gap-4"><div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center"><ShoppingCart className="text-slate-300"/></div><p>Keranjang Kosong.</p></div>}
+                  {keranjang.map(i => (
+                      <div key={i.id} className="flex justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100 hover:border-blue-200 transition-all">
+                          <div>
+                              <p className="font-bold text-sm text-slate-700 line-clamp-1">{i.nama}</p>
+                              <p className="text-[10px] text-slate-400 mb-2">@ {i.hargaEcer.toLocaleString()}</p>
+                              <div className="flex gap-3 items-center">
+                                  <button onClick={() => kurangiQty(i.id)} className="w-6 h-6 bg-white border rounded-md flex items-center justify-center text-slate-600 hover:text-red-500 hover:border-red-200 transition-all"><Minus size={12}/></button>
+                                  <span className="font-bold text-sm w-4 text-center">{i.qty}</span>
+                                  <button onClick={() => tambahKeKeranjang(i)} className="w-6 h-6 bg-white border rounded-md flex items-center justify-center text-slate-600 hover:text-blue-500 hover:border-blue-200 transition-all"><Plus size={12}/></button>
+                              </div>
+                          </div>
+                          <div className="text-right flex flex-col justify-between">
+                              <p className="font-bold text-sm text-slate-800">Rp {i.subtotal.toLocaleString()}</p>
+                              <button onClick={() => hapusItemKeranjang(i.id)} className="text-red-300 hover:text-red-500 self-end transition-colors"><Trash2 size={16}/></button>
+                          </div>
+                      </div>
+                  ))}
+              </div>
+              
+              <div className="pt-6 mt-4 border-t border-dashed border-slate-300 bg-white space-y-3">
+                  <div className="flex justify-between text-sm text-slate-500"><span>Subtotal</span><span className="font-bold text-slate-700">Rp {subtotalMurni.toLocaleString()}</span></div>
+                  
+                  {/* --- TOMBOL TOGGLE PPN (BARU) --- */}
+                  <button 
+                    onClick={() => setPpnAktif(!ppnAktif)} 
+                    className={`w-full py-3 rounded-xl border-2 font-bold flex justify-between px-4 transition-all items-center ${ppnAktif ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-400 hover:border-blue-200'}`}
+                  >
+                    <div className="flex items-center gap-2"><FileText size={18}/> PPN 11%</div>
+                    <div className={`w-10 h-6 rounded-full p-1 transition-colors ${ppnAktif ? 'bg-blue-500' : 'bg-slate-300'}`}>
+                        <div className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform ${ppnAktif ? 'translate-x-4' : ''}`}></div>
                     </div>
-                    <div className="text-right flex flex-col justify-between h-full gap-2">
-                        <p className="font-bold text-slate-700 text-sm">Rp {item.subtotal.toLocaleString()}</p>
-                        <button onClick={() => hapusItemKeranjang(item.id)} className="self-end text-red-300 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-all"><Trash2 size={16}/></button>
-                    </div>
-                </div>
-              ))}
-            </div>
-            <div className="pt-4 border-t border-dashed border-slate-200 bg-white">
-                <div className="flex justify-between items-end mb-6"><span className="font-bold text-slate-800 text-lg">TOTAL</span><span className="text-4xl font-black text-blue-600 tracking-tighter">Rp {totalBayar.toLocaleString('id-ID')}</span></div>
-                <button onClick={handleBayar} disabled={isLoading} className={`w-full py-5 rounded-2xl font-black shadow-xl text-lg flex justify-center items-center gap-2 transition-all ${isLoading ? 'bg-slate-200 text-slate-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-[1.02]'}`}>{isLoading ? 'MEMPROSES...' : 'BAYAR SEKARANG'}</button>
-            </div>
-          </aside>
+                  </button>
+
+                  {/* INFO PPN JIKA AKTIF */}
+                  {ppnAktif && (
+                     <div className="flex justify-between text-xs text-orange-600 font-bold animate-pop-in">
+                        <span>Pajak (11%)</span>
+                        <span>+ Rp {nilaiPPN.toLocaleString()}</span>
+                     </div>
+                  )}
+
+                  <div className="flex justify-between items-end border-t pt-2 mt-2">
+                      <span className="font-bold text-lg text-slate-800">TOTAL</span>
+                      <span className="text-3xl font-black text-blue-600">Rp {totalAkhir.toLocaleString()}</span>
+                  </div>
+                  
+                  <button onClick={handleBayar} disabled={isLoading} className={`w-full py-4 rounded-xl font-black text-lg shadow-xl shadow-blue-200 text-white transition-all flex justify-center items-center gap-2 ${isLoading ? 'bg-slate-300' : 'bg-blue-600 hover:bg-blue-700 hover:scale-[1.02]'}`}>
+                    {isLoading ? 'MEMPROSES...' : <><Wallet/> BAYAR</>}
+                  </button>
+              </div>
+            </aside>
         )}
+
       </div>
 
-      {/* --- MODAL POPUPS --- */}
-      {/* MODAL SUKSES (UPDATED DENGAN TOMBOL WA) */}
-      {showSuccess && <div className="fixed inset-0 bg-blue-900/40 backdrop-blur-md flex items-center justify-center z-[100] p-4"><div className="bg-white p-10 rounded-[3rem] text-center shadow-2xl w-full max-w-sm animate-pop-in"><div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle2 size={40} className="text-green-600"/></div><h2 className="text-2xl font-black text-slate-800 mb-2">Transaksi Berhasil!</h2><p className="text-slate-400 text-sm mb-6">Data tersimpan & Stok berkurang.</p><div className="space-y-3"><button onClick={() => window.print()} className="w-full bg-slate-800 hover:bg-slate-900 text-white py-4 rounded-xl font-bold flex items-center gap-2 justify-center transition-all"><Printer size={20}/> CETAK STRUK</button><button onClick={() => lastTrx && handleKirimWA(lastTrx)} className="w-full bg-green-500 hover:bg-green-600 text-white py-4 rounded-xl font-bold flex items-center gap-2 justify-center transition-all shadow-lg shadow-green-200 hover:shadow-xl"><MessageCircle size={20}/> KIRIM WA</button><button onClick={() => setShowSuccess(false)} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-4 rounded-xl font-bold transition-all">Tutup</button></div></div></div>}
+      {/* --- MODAL KOMPONEN --- */}
+      
+      {/* SUCCESS MODAL */}
+      {showSuccess && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white p-8 rounded-[2rem] text-center shadow-2xl max-w-sm w-full animate-pop-in">
+                <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 text-green-600"><CheckCircle2 size={40}/></div>
+                <h2 className="text-2xl font-black text-slate-800 mb-2">Pembayaran Berhasil!</h2>
+                <p className="text-slate-500 mb-8">Transaksi telah disimpan ke riwayat.</p>
+                <div className="flex flex-col gap-3">
+                    <button onClick={() => { setTimeout(() => window.print(), 100); }} className="bg-slate-800 hover:bg-slate-900 text-white px-6 py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all"><Printer size={20}/> Cetak Struk</button>
+                    <button onClick={() => lastTrx && handleKirimWA(lastTrx)} className="bg-green-500 hover:bg-green-600 text-white px-6 py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all"><MessageCircle size={20}/> Kirim WhatsApp</button>
+                    <button onClick={() => setShowSuccess(false)} className="bg-slate-100 hover:bg-slate-200 text-slate-600 px-6 py-4 rounded-xl font-bold transition-all">Tutup</button>
+                </div>
+            </div>
+        </div>
+      )}
 
-      {showAddModal && <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4"><div className="bg-white w-full max-w-lg rounded-[2rem] p-8 shadow-2xl animate-pop-in"><h2 className="text-2xl font-black text-slate-800 mb-6">{editId?"Edit":"Tambah"} Produk</h2><div className="space-y-4"><div className="relative"><ScanBarcode className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18}/><input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 font-bold font-mono focus:border-blue-500 outline-none" value={newItem.barcode} onChange={e=>setNewItem({...newItem,barcode:e.target.value})} placeholder="Scan Barcode Disini..."/></div><input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:border-blue-500 outline-none" value={newItem.name} onChange={e=>setNewItem({...newItem,name:e.target.value})} placeholder="Nama Produk"/><div className="grid grid-cols-2 gap-4"><input type="number" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:border-blue-500 outline-none" value={newItem.stockPcs} onChange={e=>setNewItem({...newItem,stockPcs:e.target.value})} placeholder="Stok"/><input type="number" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:border-blue-500 outline-none" value={newItem.pricePcs} onChange={e=>setNewItem({...newItem,pricePcs:e.target.value})} placeholder="Harga"/></div>
-      <div><label className="text-xs font-bold text-slate-500 uppercase ml-1">Kategori</label><select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:border-blue-500 outline-none" value={newItem.category} onChange={e=>setNewItem({...newItem,category:e.target.value})}><option value="Sembako">Sembako</option><option value="Makanan">Makanan</option><option value="Minuman">Minuman</option><option value="Elektronik">Elektronik</option><option value="Lainnya">Lainnya</option></select></div>
-      </div><div className="grid grid-cols-2 gap-4 mt-8"><button onClick={()=>setShowAddModal(false)} className="py-4 font-bold text-slate-400 hover:bg-slate-50 rounded-xl">Batal</button><button onClick={handleSimpanProduk} className="bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-black shadow-lg transition-all">SIMPAN</button></div></div></div>}
-      {showSaveSuccess && <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-[110] p-4"><div className="bg-white p-8 rounded-[2rem] text-center shadow-2xl w-full max-w-xs animate-pop-in"><div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4"><CheckCircle2 size={32} className="text-blue-600"/></div><h2 className="text-xl font-black text-slate-800 mb-2">Sukses Disimpan!</h2><p className="text-slate-400 text-xs mb-6">Data produk berhasil diperbarui.</p><button onClick={() => setShowSaveSuccess(false)} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2">MANTAP <ArrowRight size={18}/></button></div></div>}
-      {showDeleteConfirm && <div className="fixed inset-0 bg-red-900/40 backdrop-blur-md flex items-center justify-center z-[120] p-4"><div className="bg-white p-8 rounded-[2rem] text-center shadow-2xl w-full max-w-sm animate-pop-in border-4 border-white"><div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse"><Trash2 size={40} className="text-red-500"/></div><h2 className="text-2xl font-black text-slate-800 mb-2">Hapus Produk Ini?</h2><p className="text-slate-500 text-sm mb-8 leading-relaxed">Tindakan ini tidak bisa dibatalkan.<br/>Data produk akan hilang permanen.</p><div className="grid grid-cols-2 gap-3"><button onClick={() => setShowDeleteConfirm(false)} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 rounded-xl font-bold transition-all">Batal</button><button onClick={executeDeleteProduk} className="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-red-200 transition-all flex items-center justify-center gap-2">Ya, Hapus</button></div></div></div>}
-      {showEmptyWarning && <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[100]"><div className="bg-white p-10 rounded-[3rem] text-center shadow-2xl animate-pop-in"><div className="w-20 h-20 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-6"><ShoppingCart size={40} className="text-amber-500"/></div><h2 className="text-2xl font-black text-slate-800">Keranjang Kosong</h2><p className="text-slate-400 mt-2">Pilih barang dulu sebelum bayar.</p><button onClick={()=>setShowEmptyWarning(false)} className="mt-6 w-full bg-slate-100 hover:bg-slate-200 py-3 rounded-xl font-bold transition-all">OK, Siap</button></div></div>}
-      {showPasswordModal && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[150] p-4"><div className="bg-white w-full max-w-md rounded-[2rem] p-8 shadow-2xl animate-pop-in border-4 border-white relative"><h2 className="text-2xl font-black text-slate-800 mb-1 flex items-center gap-2"><Settings className="text-slate-400"/> Ganti Password</h2><div className="space-y-4 mt-6"><div><label className="text-xs font-bold text-slate-500 uppercase ml-1">Password Lama</label><input type="password" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500 transition-all" value={passForm.oldPass} onChange={e => setPassForm({...passForm, oldPass: e.target.value})} placeholder="******"/></div><div><label className="text-xs font-bold text-slate-500 uppercase ml-1">Password Baru</label><input type="password" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500 transition-all" value={passForm.newPass} onChange={e => setPassForm({...passForm, newPass: e.target.value})} placeholder="******"/></div><div><label className="text-xs font-bold text-slate-500 uppercase ml-1">Konfirmasi Password Baru</label><input type="password" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500 transition-all" value={passForm.confirmPass} onChange={e => setPassForm({...passForm, confirmPass: e.target.value})} placeholder="******"/></div></div>{passError && <p className="text-red-500 text-xs font-bold text-center bg-red-50 py-2 mt-4 rounded-lg">{passError}</p>}<div className="grid grid-cols-2 gap-3 mt-8"><button onClick={() => { setShowPasswordModal(false); setPassError(''); }} className="py-3 font-bold text-slate-400 hover:bg-slate-50 rounded-xl">Batal</button><button onClick={handleChangePassword} className="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-black shadow-lg transition-all">Simpan</button></div></div></div>)}
-      {showPassSuccess && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[160] p-4"><div className="bg-white p-10 rounded-[3rem] text-center shadow-2xl w-full max-w-sm animate-pop-in border-4 border-white"><div className="w-24 h-24 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-green-200"><UserCheck size={48} className="text-green-600"/></div><h2 className="text-2xl font-black text-slate-800 mb-2">Password Diubah!</h2><p className="text-slate-400 text-sm mb-8 leading-relaxed">Password Anda berhasil diperbarui.<br/>Silakan login kembali untuk keamanan.</p><button onClick={handleLogout} className="w-full bg-slate-800 hover:bg-slate-900 text-white py-4 rounded-xl font-bold flex items-center gap-2 justify-center transition-all shadow-xl">LOGIN ULANG <ArrowRight size={18}/></button></div></div>)}
-      {showAddUserModal && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[150] p-4"><div className="bg-white w-full max-w-md rounded-[2rem] p-8 shadow-2xl animate-pop-in border-4 border-white relative"><button onClick={() => setShowAddUserModal(false)} className="absolute top-6 right-6 text-slate-300 hover:text-slate-500"><XCircle/></button><h2 className="text-2xl font-black text-slate-800 mb-1 flex items-center gap-2"><UserPlus className="text-blue-600"/> Tambah Akun</h2><div className="space-y-4 mt-6"><div><label className="text-xs font-bold text-slate-500 uppercase ml-1">Nama Lengkap</label><input type="text" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500 transition-all" value={newUser.nama} onChange={e => setNewUser({...newUser, nama: e.target.value})} placeholder="Contoh: Budi Santoso"/></div><div><label className="text-xs font-bold text-slate-500 uppercase ml-1">Username Login</label><input type="text" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500 transition-all" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})} placeholder="tanpa spasi (ex: budi)"/></div><div><label className="text-xs font-bold text-slate-500 uppercase ml-1">Password</label><input type="text" className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500 transition-all" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})} placeholder="*******"/></div><div><label className="text-xs font-bold text-slate-500 uppercase ml-1">Role / Jabatan</label><select className="w-full bg-slate-50 border border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500 transition-all" value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}><option value="kasir">Kasir (Staf)</option><option value="admin">Admin (Full Akses)</option></select></div></div><button onClick={handleAddUser} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-black shadow-lg mt-8 transition-all">SIMPAN AKUN</button></div></div>)}
-      {showDeleteUserConfirm && (<div className="fixed inset-0 bg-red-900/40 backdrop-blur-md flex items-center justify-center z-[170] p-4"><div className="bg-white p-8 rounded-[2rem] text-center shadow-2xl w-full max-w-sm animate-pop-in border-4 border-white"><div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse"><AlertTriangle size={40} className="text-red-500"/></div><h2 className="text-2xl font-black text-slate-800 mb-2">Hapus Akun?</h2><p className="text-slate-500 text-sm mb-8 leading-relaxed">Anda akan menghapus user: <br/><span className="font-bold text-red-600 text-lg">"{userToDelete?.nama}"</span></p><div className="grid grid-cols-2 gap-3"><button onClick={() => setShowDeleteUserConfirm(false)} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 rounded-xl font-bold transition-all">Batal</button><button onClick={executeDeleteUser} className="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-red-200 transition-all flex items-center justify-center gap-2">HAPUS</button></div></div></div>)}
-      {showAddUserSuccess && (<div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[160] p-4"><div className="bg-white p-10 rounded-[3rem] text-center shadow-2xl w-full max-w-sm animate-pop-in border-4 border-white"><div className="w-24 h-24 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6 shadow-lg shadow-blue-200"><UserCheck size={48} className="text-blue-600"/></div><h2 className="text-2xl font-black text-slate-800 mb-2">Akun Siap!</h2><p className="text-slate-400 text-sm mb-8 leading-relaxed">User baru telah ditambahkan ke tim.</p><button onClick={() => setShowAddUserSuccess(false)} className="w-full bg-slate-800 hover:bg-slate-900 text-white py-4 rounded-xl font-bold flex items-center gap-2 justify-center transition-all shadow-xl cursor-pointer pointer-events-auto">OK, SIAP <ArrowRight size={18}/></button></div></div>)}
-      {showDeleteHistoryConfirm && (<div className="fixed inset-0 bg-red-900/40 backdrop-blur-md flex items-center justify-center z-[170] p-4"><div className="bg-white p-8 rounded-[2rem] text-center shadow-2xl w-full max-w-sm animate-pop-in border-4 border-white"><div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6 animate-pulse"><Trash2 size={40} className="text-red-500"/></div><h2 className="text-xl font-black text-slate-800 mb-2">Hapus Riwayat Ini?</h2><p className="text-slate-500 text-sm mb-8 leading-relaxed">ID: {historyToDelete}<br/>Data akan hilang dari laporan.</p><div className="grid grid-cols-2 gap-3"><button onClick={() => setShowDeleteHistoryConfirm(false)} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 rounded-xl font-bold transition-all">Batal</button><button onClick={executeDeleteHistory} className="w-full bg-red-500 hover:bg-red-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-red-200 transition-all flex items-center justify-center gap-2">HAPUS</button></div></div></div>)}
+      {/* ADD/EDIT PRODUCT MODAL */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white p-8 rounded-[2rem] w-full max-w-md shadow-2xl animate-pop-in">
+                <h2 className="text-2xl font-black text-slate-800 mb-6">{editId ? 'Edit Produk' : 'Tambah Produk Baru'}</h2>
+                <div className="space-y-4">
+                    <div><label className="text-xs font-bold text-slate-400 uppercase">Barcode</label><input className="w-full border-2 border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500" value={newItem.barcode} onChange={e => setNewItem({...newItem, barcode: e.target.value})} placeholder="Scan/Ketik Barcode"/></div>
+                    <div><label className="text-xs font-bold text-slate-400 uppercase">Nama Produk</label><input className="w-full border-2 border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500" value={newItem.name} onChange={e => setNewItem({...newItem, name: e.target.value})} placeholder="Nama Barang"/></div>
+                    <div className="flex gap-4">
+                        <div className="w-1/2"><label className="text-xs font-bold text-slate-400 uppercase">Stok</label><input type="number" className="w-full border-2 border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500" value={newItem.stockPcs} onChange={e => setNewItem({...newItem, stockPcs: e.target.value})} placeholder="0"/></div>
+                        <div className="w-1/2"><label className="text-xs font-bold text-slate-400 uppercase">Harga</label><input type="number" className="w-full border-2 border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500" value={newItem.pricePcs} onChange={e => setNewItem({...newItem, pricePcs: e.target.value})} placeholder="0"/></div>
+                    </div>
+                    <div><label className="text-xs font-bold text-slate-400 uppercase">Kategori</label><select className="w-full border-2 border-slate-200 p-3 rounded-xl font-bold outline-none focus:border-blue-500 bg-white" value={newItem.category} onChange={e => setNewItem({...newItem, category: e.target.value})}><option>Sembako</option><option>Makanan</option><option>Minuman</option><option>Rokok</option><option>Obat</option><option>Lainnya</option></select></div>
+                </div>
+                <div className="flex gap-3 mt-8">
+                    <button onClick={() => setShowAddModal(false)} className="flex-1 bg-slate-100 text-slate-500 py-3 rounded-xl font-bold hover:bg-slate-200">Batal</button>
+                    <button onClick={handleSimpanProduk} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200">Simpan</button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* SAVE SUCCESS NOTIFICATION */}
+      {showSaveSuccess && <div className="fixed bottom-8 right-8 bg-slate-800 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 z-50 animate-pop-in"><CheckCircle2 className="text-green-400"/> <div><h4 className="font-bold">Berhasil Disimpan!</h4><p className="text-xs text-slate-400">Data produk telah diperbarui.</p></div><button onClick={() => setShowSaveSuccess(false)} className="ml-4 p-1 hover:bg-white/20 rounded"><XCircle size={18}/></button></div>}
+
+      {/* EMPTY CART WARNING */}
+      {showEmptyWarning && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white p-6 rounded-[2rem] text-center shadow-2xl max-w-xs animate-pop-in">
+                <ShoppingCart size={50} className="mx-auto text-orange-400 mb-4"/>
+                <h3 className="font-bold text-lg text-slate-800">Keranjang Kosong</h3>
+                <p className="text-sm text-slate-400 mb-6">Scan barang atau pilih dari daftar.</p>
+                <button onClick={() => setShowEmptyWarning(false)} className="w-full bg-slate-100 text-slate-700 font-bold py-3 rounded-xl hover:bg-slate-200">OK</button>
+            </div>
+        </div>
+      )}
+
+      {/* DELETE CONFIRMATION */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white p-6 rounded-[2rem] text-center shadow-2xl max-w-xs animate-pop-in">
+                <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4"><AlertTriangle size={32}/></div>
+                <h3 className="font-bold text-lg text-slate-800">Hapus Produk?</h3>
+                <p className="text-sm text-slate-400 mb-6">Data yang dihapus tidak bisa kembali.</p>
+                <div className="flex gap-2">
+                    <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 bg-slate-100 text-slate-700 font-bold py-3 rounded-xl">Batal</button>
+                    <button onClick={executeDeleteProduk} className="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg shadow-red-200">Hapus</button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* DELETE HISTORY CONFIRMATION */}
+      {showDeleteHistoryConfirm && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white p-6 rounded-[2rem] text-center shadow-2xl max-w-xs animate-pop-in">
+                <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4"><Trash2 size={32}/></div>
+                <h3 className="font-bold text-lg text-slate-800">Hapus Transaksi?</h3>
+                <div className="flex gap-2 mt-6">
+                    <button onClick={() => setShowDeleteHistoryConfirm(false)} className="flex-1 bg-slate-100 text-slate-700 font-bold py-3 rounded-xl">Batal</button>
+                    <button onClick={executeDeleteHistory} className="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg shadow-red-200">Hapus</button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* ADD USER MODAL */}
+      {showAddUserModal && (
+         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white p-8 rounded-[2rem] w-full max-w-sm shadow-2xl animate-pop-in">
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><UserPlus size={24} className="text-blue-600"/> Tambah User</h2>
+                <div className="space-y-3">
+                    <input className="w-full border p-3 rounded-xl font-bold outline-none focus:border-blue-500" placeholder="Nama Lengkap" value={newUser.nama} onChange={e => setNewUser({...newUser, nama: e.target.value})}/>
+                    <input className="w-full border p-3 rounded-xl font-bold outline-none focus:border-blue-500" placeholder="Username Login" value={newUser.username} onChange={e => setNewUser({...newUser, username: e.target.value})}/>
+                    <input className="w-full border p-3 rounded-xl font-bold outline-none focus:border-blue-500" placeholder="Password" value={newUser.password} onChange={e => setNewUser({...newUser, password: e.target.value})}/>
+                    <select className="w-full border p-3 rounded-xl font-bold outline-none focus:border-blue-500 bg-white" value={newUser.role} onChange={e => setNewUser({...newUser, role: e.target.value})}><option value="kasir">Kasir</option><option value="admin">Admin</option></select>
+                </div>
+                <div className="flex gap-2 mt-6">
+                    <button onClick={() => setShowAddUserModal(false)} className="flex-1 bg-slate-100 py-3 rounded-xl font-bold text-slate-500">Batal</button>
+                    <button onClick={handleAddUser} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700">Simpan</button>
+                </div>
+            </div>
+         </div>
+      )}
+      
+      {/* SUCCESS ADD USER NOTIF */}
+      {showAddUserSuccess && <div className="fixed bottom-8 right-8 bg-green-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 z-50 animate-pop-in"><UserCheck/> <div><h4 className="font-bold">User Ditambahkan!</h4></div><button onClick={() => setShowAddUserSuccess(false)} className="ml-4 hover:bg-white/20 rounded p-1"><XCircle size={18}/></button></div>}
+
+      {/* DELETE USER CONFIRM */}
+      {showDeleteUserConfirm && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white p-6 rounded-[2rem] text-center shadow-2xl max-w-xs animate-pop-in">
+                <h3 className="font-bold text-lg text-slate-800 mb-2">Hapus User?</h3>
+                <p className="text-slate-500 mb-6">User <b>{userToDelete?.nama}</b> akan dihapus permanen.</p>
+                <div className="flex gap-2">
+                    <button onClick={() => setShowDeleteUserConfirm(false)} className="flex-1 bg-slate-100 font-bold py-3 rounded-xl">Batal</button>
+                    <button onClick={executeDeleteUser} className="flex-1 bg-red-500 text-white font-bold py-3 rounded-xl">Hapus</button>
+                </div>
+            </div>
+        </div>
+      )}
+
+      {/* CHANGE PASSWORD MODAL */}
+      {showPasswordModal && (
+         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-white p-8 rounded-[2rem] w-full max-w-sm shadow-2xl animate-pop-in">
+                <h2 className="text-xl font-bold mb-4 flex items-center gap-2"><KeyRound size={24} className="text-blue-600"/> Ganti Password</h2>
+                <div className="space-y-3">
+                    <input type="password" className="w-full border p-3 rounded-xl font-bold outline-none focus:border-blue-500" placeholder="Password Lama" value={passForm.oldPass} onChange={e => setPassForm({...passForm, oldPass: e.target.value})}/>
+                    <input type="password" className="w-full border p-3 rounded-xl font-bold outline-none focus:border-blue-500" placeholder="Password Baru" value={passForm.newPass} onChange={e => setPassForm({...passForm, newPass: e.target.value})}/>
+                    <input type="password" className="w-full border p-3 rounded-xl font-bold outline-none focus:border-blue-500" placeholder="Konfirmasi Password Baru" value={passForm.confirmPass} onChange={e => setPassForm({...passForm, confirmPass: e.target.value})}/>
+                </div>
+                {passError && <p className="text-red-500 text-xs font-bold mt-2 text-center">{passError}</p>}
+                <div className="flex gap-2 mt-6">
+                    <button onClick={() => { setShowPasswordModal(false); setPassError(''); setPassForm({oldPass:'',newPass:'',confirmPass:''}); }} className="flex-1 bg-slate-100 py-3 rounded-xl font-bold text-slate-500">Batal</button>
+                    <button onClick={handleChangePassword} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold hover:bg-blue-700">Simpan</button>
+                </div>
+            </div>
+         </div>
+      )}
+
+      {/* SUCCESS PASSWORD NOTIF */}
+      {showPassSuccess && <div className="fixed bottom-8 right-8 bg-green-600 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3 z-50 animate-pop-in"><CheckCircle2/> <div><h4 className="font-bold">Password Berhasil Diganti!</h4></div><button onClick={() => setShowPassSuccess(false)} className="ml-4 hover:bg-white/20 rounded p-1"><XCircle size={18}/></button></div>}
 
     </div>
   );

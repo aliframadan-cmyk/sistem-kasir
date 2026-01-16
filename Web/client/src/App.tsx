@@ -2,16 +2,18 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx'; // Import Library Excel
 import { 
   LayoutGrid, ShoppingCart, Package, History, Search, LayoutDashboard,
-  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, Percent, UserCircle, KeyRound, Settings, ShieldCheck, Users, UserPlus, XCircle, UserCheck, AlertTriangle, Minus, Plus, Download
+  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, Percent, UserCircle, KeyRound, Settings, ShieldCheck, Users, UserPlus, XCircle, UserCheck, AlertTriangle, Minus, Plus, Download, Filter, AlertOctagon
 } from 'lucide-react';
 
 // --- DATA AWAL PRODUK ---
 const DATA_PRODUK_AWAL = [
-  { id: 1, nama: "Beras Premium 5kg", kategori: "Sembako", stok: 20, hargaEcer: 65000, barcode: "8991001" },
+  { id: 1, nama: "Beras Premium 5kg", kategori: "Sembako", stok: 3, hargaEcer: 65000, barcode: "8991001" }, // Stok sengaja dikit buat tes alert
   { id: 2, nama: "Minyak Goreng 2L", kategori: "Sembako", stok: 15, hargaEcer: 32000, barcode: "8991002" },
   { id: 3, nama: "Gula Pasir 1kg", kategori: "Sembako", stok: 50, hargaEcer: 14500, barcode: "8991003" },
   { id: 4, nama: "Telur Ayam 1kg", kategori: "Sembako", stok: 8, hargaEcer: 28000, barcode: "8991004" },
   { id: 5, nama: "Indomie Goreng", kategori: "Makanan", stok: 100, hargaEcer: 3500, barcode: "8991005" },
+  { id: 6, nama: "Teh Pucuk Harum", kategori: "Minuman", stok: 24, hargaEcer: 4000, barcode: "8991006" },
+  { id: 7, nama: "Kopi Kapal Api", kategori: "Minuman", stok: 2, hargaEcer: 1500, barcode: "8991007" }, // Stok dikit
 ];
 
 // --- DATA USER DEFAULT ---
@@ -71,6 +73,7 @@ const App = () => {
   const [keranjang, setKeranjang] = useState<ItemKeranjang[]>([]);
   const [diskon, setDiskon] = useState<number>(0); 
   const [search, setSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("Semua"); // FITUR BARU: Filter Kategori
   const [barcodeInput, setBarcodeInput] = useState("");
   
   // UI States
@@ -93,6 +96,20 @@ const App = () => {
   // --- CALCULATIONS ---
   const subtotalKotor = useMemo(() => keranjang.reduce((a, b) => a + b.subtotal, 0), [keranjang]);
   const totalBayarAkhir = Math.max(0, subtotalKotor - diskon);
+
+  // FITUR BARU: Ambil List Kategori Unik
+  const uniqueCategories = useMemo(() => {
+    return ['Semua', ...new Set(produkList.map(item => item.kategori))];
+  }, [produkList]);
+
+  // FITUR BARU: Filter Produk berdasarkan Search AND Kategori
+  const filteredProduk = useMemo(() => {
+    return produkList.filter(p => {
+        const matchSearch = p.nama.toLowerCase().includes(search.toLowerCase());
+        const matchCategory = selectedCategory === 'Semua' || p.kategori === selectedCategory;
+        return matchSearch && matchCategory;
+    });
+  }, [produkList, search, selectedCategory]);
 
   // --- EFFECT ---
   useEffect(() => { localStorage.setItem('db_produk', JSON.stringify(produkList)); }, [produkList]);
@@ -177,43 +194,24 @@ const App = () => {
     setShowPassSuccess(true);
   };
 
-  // --- LOGIKA EXPORT EXCEL (BARU) ---
+  // --- LOGIKA EXPORT EXCEL ---
   const handleExportExcel = () => {
     if (riwayat.length === 0) return alert("Belum ada data transaksi untuk diexport.");
-    
-    // 1. Format Data agar Rapi di Excel
     const dataUntukExcel = riwayat.map(trx => ({
         "ID Transaksi": trx.id,
         "Tanggal": trx.tanggal,
         "Waktu": trx.waktu,
         "Kasir": trx.kasir,
-        "Detail Barang": trx.items.map(item => `${item.nama} (${item.qty})`).join(", "), // Menggabungkan item jadi 1 cell
+        "Detail Barang": trx.items.map(item => `${item.nama} (${item.qty})`).join(", "),
         "Subtotal Awal": trx.subtotalAwal,
         "Diskon": trx.diskon,
         "Total Bayar": trx.total
     }));
-
-    // 2. Buat Worksheet
     const worksheet = XLSX.utils.json_to_sheet(dataUntukExcel);
-
-    // 3. Atur Lebar Kolom (Optional, biar rapi)
-    const wscols = [
-        {wch: 20}, // ID
-        {wch: 15}, // Tanggal
-        {wch: 10}, // Waktu
-        {wch: 15}, // Kasir
-        {wch: 50}, // Barang (lebar karena isinya banyak)
-        {wch: 15}, // Subtotal
-        {wch: 10}, // Diskon
-        {wch: 15}, // Total
-    ];
+    const wscols = [{wch: 20}, {wch: 15}, {wch: 10}, {wch: 15}, {wch: 50}, {wch: 15}, {wch: 10}, {wch: 15}];
     worksheet['!cols'] = wscols;
-
-    // 4. Buat Workbook dan Download
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Laporan Penjualan");
-    
-    // Nama file unik pakai tanggal hari ini
     const tanggalHariIni = new Date().toLocaleDateString('id-ID').replace(/\//g, '-');
     XLSX.writeFile(workbook, `Laporan_Transaksi_${tanggalHariIni}.xlsx`);
   };
@@ -221,21 +219,12 @@ const App = () => {
   // --- LOGIKA POS (KERANJANG) ---
   const tambahKeKeranjang = (produk: Produk) => {
     if (produk.stok <= 0) return alert("Stok Habis!");
-    
     setKeranjang(prev => {
         const itemAda = prev.find(k => k.id === produk.id);
         const currentQty = itemAda ? itemAda.qty : 0;
-        
-        if (currentQty + 1 > produk.stok) {
-            alert("Stok tidak mencukupi!");
-            return prev;
-        }
-
-        if (itemAda) {
-            return prev.map(k => k.id === produk.id ? { ...k, qty: k.qty + 1, subtotal: (k.qty + 1) * k.hargaEcer } : k);
-        } else {
-            return [...prev, { ...produk, qty: 1, subtotal: produk.hargaEcer }];
-        }
+        if (currentQty + 1 > produk.stok) { alert("Stok tidak mencukupi!"); return prev; }
+        if (itemAda) { return prev.map(k => k.id === produk.id ? { ...k, qty: k.qty + 1, subtotal: (k.qty + 1) * k.hargaEcer } : k); } 
+        else { return [...prev, { ...produk, qty: 1, subtotal: produk.hargaEcer }]; }
     });
   };
 
@@ -243,18 +232,12 @@ const App = () => {
     setKeranjang(prev => {
         const item = prev.find(k => k.id === id);
         if (!item) return prev;
-        
-        if (item.qty > 1) {
-            return prev.map(k => k.id === id ? { ...k, qty: k.qty - 1, subtotal: (k.qty - 1) * k.hargaEcer } : k);
-        } else {
-            return prev.filter(k => k.id !== id);
-        }
+        if (item.qty > 1) { return prev.map(k => k.id === id ? { ...k, qty: k.qty - 1, subtotal: (k.qty - 1) * k.hargaEcer } : k); } 
+        else { return prev.filter(k => k.id !== id); }
     });
   };
 
-  const hapusItemKeranjang = (id: number) => {
-    setKeranjang(prev => prev.filter(k => k.id !== id));
-  };
+  const hapusItemKeranjang = (id: number) => { setKeranjang(prev => prev.filter(k => k.id !== id)); };
 
   const handleScanBarcode = (e: React.FormEvent) => {
     e.preventDefault();
@@ -267,7 +250,6 @@ const App = () => {
   const handleBayar = async () => {
     if (keranjang.length === 0) return setShowEmptyWarning(true);
     setIsLoading(true);
-
     setTimeout(() => {
         const now = new Date();
         const trx: HistoryTransaksi = { 
@@ -307,19 +289,8 @@ const App = () => {
   
   // --- LOGIKA RIWAYAT ---
   const hapusSemuaRiwayat = () => { if(confirm("Hapus SEMUA riwayat transaksi?")) { setRiwayat([]); } };
-  
-  const clickHapusSatuRiwayat = (id: string) => {
-    setHistoryToDelete(id);
-    setShowDeleteHistoryConfirm(true);
-  };
-  
-  const executeDeleteHistory = () => {
-    if (historyToDelete) {
-        setRiwayat(prev => prev.filter(r => r.id !== historyToDelete));
-        setShowDeleteHistoryConfirm(false);
-        setHistoryToDelete(null);
-    }
-  };
+  const clickHapusSatuRiwayat = (id: string) => { setHistoryToDelete(id); setShowDeleteHistoryConfirm(true); };
+  const executeDeleteHistory = () => { if (historyToDelete) { setRiwayat(prev => prev.filter(r => r.id !== historyToDelete)); setShowDeleteHistoryConfirm(false); setHistoryToDelete(null); } };
 
   // --- LOGIKA DASHBOARD ---
   const stats = useMemo(() => {
@@ -335,7 +306,11 @@ const App = () => {
     const salesMap: Record<string, number> = {};
     riwayat.forEach(t => { t.items.forEach(i => { salesMap[i.nama] = (salesMap[i.nama] || 0) + i.qty; }); });
     const topProduk = Object.entries(salesMap).sort(([, a], [, b]) => b - a).slice(0, 5);
-    return { totalOmset, totalTransaksi, itemsTerjual, topProduk, chartData, maxOmset };
+    
+    // FITUR BARU: Hitung stok menipis
+    const lowStockItems = produkList.filter(p => p.stok <= 5);
+
+    return { totalOmset, totalTransaksi, itemsTerjual, topProduk, chartData, maxOmset, lowStockItems };
   }, [riwayat, produkList]);
 
 
@@ -430,6 +405,25 @@ const App = () => {
                     <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm"><h3 className="text-4xl font-black text-slate-800">{stats.totalTransaksi}</h3><p className="text-slate-400 text-sm">Transaksi</p></div>
                     <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm"><h3 className="text-4xl font-black text-slate-800">{stats.itemsTerjual}</h3><p className="text-slate-400 text-sm">Item Terjual</p></div>
                 </div>
+
+                {/* FITUR BARU: ALERT LOW STOCK */}
+                {stats.lowStockItems.length > 0 && (
+                    <div className="bg-orange-50 border border-orange-100 p-6 rounded-[2rem]">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="p-2 bg-orange-100 rounded-lg"><AlertOctagon size={24} className="text-orange-600"/></div>
+                            <h3 className="text-lg font-bold text-orange-800">Perhatian: Stok Menipis</h3>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                            {stats.lowStockItems.map(item => (
+                                <div key={item.id} className="bg-white p-3 rounded-xl border border-orange-100 flex justify-between items-center shadow-sm">
+                                    <span className="font-bold text-slate-700 text-sm">{item.nama}</span>
+                                    <span className="bg-red-100 text-red-600 text-xs font-black px-2 py-1 rounded">Sisa: {item.stok}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                     <div className="lg:col-span-2 bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm">
                         <div className="flex items-center gap-3 mb-8"><div className="p-2 bg-slate-100 rounded-lg"><TrendingUp size={20} className="text-slate-600"/></div><h3 className="font-bold text-slate-800">Grafik 7 Hari</h3></div>
@@ -445,14 +439,30 @@ const App = () => {
 
           {/* POS TAB */}
           {activeTab === 'pos' && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-20">
-              {produkList.filter(p => p.nama.toLowerCase().includes(search.toLowerCase())).map(p => (
-                <div key={p.id} onClick={() => tambahKeKeranjang(p)} className="bg-white p-6 rounded-[2rem] border border-slate-100 hover:border-blue-500 cursor-pointer shadow-sm hover:shadow-xl relative overflow-hidden group transition-all duration-300">
-                  <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-2 py-1 rounded-md uppercase tracking-wider">{p.kategori}</span>
-                  <h3 className="text-lg font-bold text-slate-700 mt-3 line-clamp-2 leading-tight h-12">{p.nama}</h3>
-                  <div className="flex justify-between items-end mt-2"><p className="text-blue-600 font-black text-xl">Rp {p.hargaEcer.toLocaleString('id-ID')}</p><p className={`text-xs font-bold px-2 py-1 rounded-lg ${p.stok < 10 ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-500'}`}>Stok: {p.stok}</p></div>
+            <div className="pb-20">
+                {/* FITUR BARU: FILTER KATEGORI */}
+                <div className="flex gap-2 overflow-x-auto pb-4 mb-2 scrollbar-hide">
+                    {uniqueCategories.map(cat => (
+                        <button 
+                            key={cat} 
+                            onClick={() => setSelectedCategory(cat)}
+                            className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all ${selectedCategory === cat ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'bg-white text-slate-500 border border-slate-200 hover:bg-slate-50'}`}
+                        >
+                            {cat}
+                        </button>
+                    ))}
                 </div>
-              ))}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {filteredProduk.map(p => (
+                    <div key={p.id} onClick={() => tambahKeKeranjang(p)} className="bg-white p-6 rounded-[2rem] border border-slate-100 hover:border-blue-500 cursor-pointer shadow-sm hover:shadow-xl relative overflow-hidden group transition-all duration-300">
+                      <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-2 py-1 rounded-md uppercase tracking-wider">{p.kategori}</span>
+                      <h3 className="text-lg font-bold text-slate-700 mt-3 line-clamp-2 leading-tight h-12">{p.nama}</h3>
+                      <div className="flex justify-between items-end mt-2"><p className="text-blue-600 font-black text-xl">Rp {p.hargaEcer.toLocaleString('id-ID')}</p><p className={`text-xs font-bold px-2 py-1 rounded-lg ${p.stok < 10 ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-500'}`}>Stok: {p.stok}</p></div>
+                    </div>
+                  ))}
+                  {filteredProduk.length === 0 && <div className="col-span-full text-center py-10 text-slate-400">Tidak ada produk ditemukan.</div>}
+                </div>
             </div>
           )}
 
@@ -463,7 +473,7 @@ const App = () => {
               <div className="bg-white rounded-[2rem] border border-slate-100 overflow-hidden shadow-sm">
                 <table className="w-full text-left">
                   <thead className="bg-slate-50 text-slate-400 text-[11px] uppercase font-bold tracking-widest"><tr><th className="px-6 py-5">Barang</th><th className="px-6 py-5 text-center">Stok</th><th className="px-6 py-5 text-right">Harga</th><th className="px-6 py-5 text-center">Aksi</th></tr></thead>
-                  <tbody className="divide-y divide-slate-50">{produkList.map(p => (<tr key={p.id} className="hover:bg-slate-50 transition-colors"><td className="px-6 py-5 font-bold text-slate-700">{p.nama}</td><td className="px-6 py-5 text-center font-bold text-blue-600">{p.stok}</td><td className="px-6 py-5 text-right font-black">Rp {p.hargaEcer.toLocaleString('id-ID')}</td><td className="px-6 py-5 text-center flex justify-center gap-2"><button onClick={() => { setEditId(p.id); setNewItem({name:p.nama,category:p.kategori,stockPcs:p.stok.toString(),pricePcs:p.hargaEcer.toString(),barcode:p.barcode}); setShowAddModal(true); }} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"><Edit size={18}/></button><button onClick={() => clickHapusProduk(p.id)} className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100"><Trash2 size={18}/></button></td></tr>))}</tbody>
+                  <tbody className="divide-y divide-slate-50">{produkList.map(p => (<tr key={p.id} className="hover:bg-slate-50 transition-colors"><td className="px-6 py-5 font-bold text-slate-700">{p.nama} <br/><span className="text-[10px] text-slate-400 font-normal uppercase">{p.kategori}</span></td><td className={`px-6 py-5 text-center font-bold ${p.stok <= 5 ? 'text-red-500' : 'text-blue-600'}`}>{p.stok}</td><td className="px-6 py-5 text-right font-black">Rp {p.hargaEcer.toLocaleString('id-ID')}</td><td className="px-6 py-5 text-center flex justify-center gap-2"><button onClick={() => { setEditId(p.id); setNewItem({name:p.nama,category:p.kategori,stockPcs:p.stok.toString(),pricePcs:p.hargaEcer.toString(),barcode:p.barcode}); setShowAddModal(true); }} className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100"><Edit size={18}/></button><button onClick={() => clickHapusProduk(p.id)} className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100"><Trash2 size={18}/></button></td></tr>))}</tbody>
                 </table>
               </div>
             </div>
@@ -575,7 +585,10 @@ const App = () => {
 
       {/* --- MODAL POPUPS --- */}
       {showSuccess && <div className="fixed inset-0 bg-blue-900/40 backdrop-blur-md flex items-center justify-center z-[100] p-4"><div className="bg-white p-10 rounded-[3rem] text-center shadow-2xl w-full max-w-sm animate-pop-in"><div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle2 size={40} className="text-green-600"/></div><h2 className="text-2xl font-black text-slate-800 mb-2">Transaksi Berhasil!</h2><p className="text-slate-400 text-sm mb-6">Data tersimpan & Stok berkurang.</p><div className="space-y-3"><button onClick={() => window.print()} className="w-full bg-slate-800 hover:bg-slate-900 text-white py-4 rounded-xl font-bold flex items-center gap-2 justify-center transition-all"><Printer size={20}/> CETAK STRUK</button><button onClick={() => setShowSuccess(false)} className="w-full bg-slate-100 hover:bg-slate-200 text-slate-600 py-4 rounded-xl font-bold transition-all">Tutup</button></div></div></div>}
-      {showAddModal && <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4"><div className="bg-white w-full max-w-lg rounded-[2rem] p-8 shadow-2xl animate-pop-in"><h2 className="text-2xl font-black text-slate-800 mb-6">{editId?"Edit":"Tambah"} Produk</h2><div className="space-y-4"><div className="relative"><ScanBarcode className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18}/><input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 font-bold font-mono focus:border-blue-500 outline-none" value={newItem.barcode} onChange={e=>setNewItem({...newItem,barcode:e.target.value})} placeholder="Scan Barcode Disini..."/></div><input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:border-blue-500 outline-none" value={newItem.name} onChange={e=>setNewItem({...newItem,name:e.target.value})} placeholder="Nama Produk"/><div className="grid grid-cols-2 gap-4"><input type="number" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:border-blue-500 outline-none" value={newItem.stockPcs} onChange={e=>setNewItem({...newItem,stockPcs:e.target.value})} placeholder="Stok"/><input type="number" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:border-blue-500 outline-none" value={newItem.pricePcs} onChange={e=>setNewItem({...newItem,pricePcs:e.target.value})} placeholder="Harga"/></div></div><div className="grid grid-cols-2 gap-4 mt-8"><button onClick={()=>setShowAddModal(false)} className="py-4 font-bold text-slate-400 hover:bg-slate-50 rounded-xl">Batal</button><button onClick={handleSimpanProduk} className="bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-black shadow-lg transition-all">SIMPAN</button></div></div></div>}
+      {showAddModal && <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4"><div className="bg-white w-full max-w-lg rounded-[2rem] p-8 shadow-2xl animate-pop-in"><h2 className="text-2xl font-black text-slate-800 mb-6">{editId?"Edit":"Tambah"} Produk</h2><div className="space-y-4"><div className="relative"><ScanBarcode className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18}/><input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-10 pr-4 py-3 font-bold font-mono focus:border-blue-500 outline-none" value={newItem.barcode} onChange={e=>setNewItem({...newItem,barcode:e.target.value})} placeholder="Scan Barcode Disini..."/></div><input type="text" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:border-blue-500 outline-none" value={newItem.name} onChange={e=>setNewItem({...newItem,name:e.target.value})} placeholder="Nama Produk"/><div className="grid grid-cols-2 gap-4"><input type="number" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:border-blue-500 outline-none" value={newItem.stockPcs} onChange={e=>setNewItem({...newItem,stockPcs:e.target.value})} placeholder="Stok"/><input type="number" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:border-blue-500 outline-none" value={newItem.pricePcs} onChange={e=>setNewItem({...newItem,pricePcs:e.target.value})} placeholder="Harga"/></div>
+      {/* KATEGORI INPUT */}
+      <div><label className="text-xs font-bold text-slate-500 uppercase ml-1">Kategori</label><select className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 font-bold focus:border-blue-500 outline-none" value={newItem.category} onChange={e=>setNewItem({...newItem,category:e.target.value})}><option value="Sembako">Sembako</option><option value="Makanan">Makanan</option><option value="Minuman">Minuman</option><option value="Elektronik">Elektronik</option><option value="Lainnya">Lainnya</option></select></div>
+      </div><div className="grid grid-cols-2 gap-4 mt-8"><button onClick={()=>setShowAddModal(false)} className="py-4 font-bold text-slate-400 hover:bg-slate-50 rounded-xl">Batal</button><button onClick={handleSimpanProduk} className="bg-blue-600 hover:bg-blue-700 text-white py-4 rounded-xl font-black shadow-lg transition-all">SIMPAN</button></div></div></div>}
       {showSaveSuccess && <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-[110] p-4"><div className="bg-white p-8 rounded-[2rem] text-center shadow-2xl w-full max-w-xs animate-pop-in"><div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4"><CheckCircle2 size={32} className="text-blue-600"/></div><h2 className="text-xl font-black text-slate-800 mb-2">Sukses Disimpan!</h2><p className="text-slate-400 text-xs mb-6">Data produk berhasil diperbarui.</p><button onClick={() => setShowSaveSuccess(false)} className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2">MANTAP <ArrowRight size={18}/></button></div></div>}
       
       {/* MODAL HAPUS PRODUK */}

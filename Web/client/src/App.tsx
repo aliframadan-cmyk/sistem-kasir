@@ -2,12 +2,14 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import * as XLSX from 'xlsx';
 import { 
   LayoutGrid, ShoppingCart, History, Search, LayoutDashboard,
-  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, UserCircle, KeyRound, Settings, Users, UserPlus, XCircle, UserCheck, AlertTriangle, Minus, Plus, Download, AlertOctagon, MessageCircle, FileText, Tag, CreditCard, Banknote
+  Trash2, CheckCircle2, ReceiptText, PlusCircle, Edit, LogOut, Printer, Eraser, ScanBarcode, TrendingUp, Wallet, ArrowRight, UserCircle, KeyRound, Settings, Users, UserPlus, XCircle, UserCheck, AlertTriangle, Minus, Plus, Download, AlertOctagon, MessageCircle, FileText, Tag, CreditCard, Banknote, QrCode
 } from 'lucide-react';
 
 // --- KONFIGURASI TOKO ---
 const LOGO_URL = "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT_beJfa1EtbhzGt4z7dcWZM2EDGfwtCMZ3Pg&s"; 
 const NAMA_TOKO = "TOKO SUDAR";
+// GANTI URL INI DENGAN LINK GAMBAR QRIS ASLI ANDA
+const QRIS_IMAGE_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/QR_code_for_mobile_English_Wikipedia.svg/1200px-QR_code_for_mobile_English_Wikipedia.svg.png";
 
 // --- DATA AWAL PRODUK ---
 const DATA_PRODUK_AWAL = [
@@ -26,7 +28,7 @@ const DEFAULT_USERS = [
   { id: 2, username: 'kasir', password: '123', role: 'kasir', nama: 'Kasir Utama' },
 ];
 
-// --- Interfaces (UPDATED: Added metodePembayaran) ---
+// --- Interfaces ---
 interface Produk { id: number; nama: string; kategori: string; stok: number; hargaEcer: number; barcode: string; }
 interface ItemKeranjang extends Produk { qty: number; subtotal: number; }
 interface HistoryTransaksi { 
@@ -39,7 +41,7 @@ interface HistoryTransaksi {
     diskon: number;
     ppn: number;      
     total: number;
-    metodePembayaran: string; // BARU: 'Cash' atau 'QRIS'
+    metodePembayaran: string; 
 }
 interface UserSession { id: number; username: string; role: 'admin' | 'kasir'; nama: string; }
 interface UserData { id: number; username: string; password: string; role: string; nama: string; }
@@ -90,10 +92,10 @@ const App = () => {
   const [selectedCategory, setSelectedCategory] = useState("Semua");
   const [barcodeInput, setBarcodeInput] = useState("");
   
-  // --- STATE PPN, DISKON, & METODE BAYAR (BARU) ---
+  // --- STATE PPN, DISKON, & METODE BAYAR ---
   const [ppnAktif, setPpnAktif] = useState(false);
   const [inputDiskon, setInputDiskon] = useState(""); 
-  const [metodePembayaran, setMetodePembayaran] = useState<string>('Cash'); // Default Cash
+  const [metodePembayaran, setMetodePembayaran] = useState<string>('Cash'); 
 
   // UI States
   const [showEmptyWarning, setShowEmptyWarning] = useState(false);
@@ -103,6 +105,7 @@ const App = () => {
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
   const [showDeleteHistoryConfirm, setShowDeleteHistoryConfirm] = useState(false);
   const [historyToDelete, setHistoryToDelete] = useState<string | null>(null);
+  const [showQrisModal, setShowQrisModal] = useState(false); // STATE BARU UNTUK QRIS
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -180,13 +183,13 @@ const App = () => {
     setShowPassSuccess(false);
   };
 
-  // --- LOGIKA KIRIM WHATSAPP (UPDATED WITH METODE BAYAR) ---
+  // --- LOGIKA KIRIM WHATSAPP ---
   const handleKirimWA = (trx: HistoryTransaksi) => {
     let pesan = `*STRUK BELANJA - ${NAMA_TOKO}*\n`;
     pesan += `No: ${trx.id}\n`;
     pesan += `Tanggal: ${trx.tanggal} ${trx.waktu}\n`;
     pesan += `Kasir: ${trx.kasir}\n`;
-    pesan += `Metode Bayar: ${trx.metodePembayaran}\n`; // Info Metode Bayar
+    pesan += `Metode Bayar: ${trx.metodePembayaran}\n`;
     pesan += `--------------------------------\n`;
     trx.items.forEach(item => {
         pesan += `${item.nama}\n`;
@@ -262,7 +265,7 @@ const App = () => {
         "Tanggal": trx.tanggal,
         "Waktu": trx.waktu,
         "Kasir": trx.kasir,
-        "Metode Bayar": trx.metodePembayaran, // Kolom Baru
+        "Metode Bayar": trx.metodePembayaran,
         "Detail Barang": trx.items.map(item => `${item.nama} (${item.qty})`).join(", "),
         "Subtotal": trx.subtotal,
         "Diskon": trx.diskon,
@@ -309,9 +312,25 @@ const App = () => {
     else { alert(`Barang tidak ditemukan!`); setBarcodeInput(""); }
   };
 
-  const handleBayar = async () => {
-    if (keranjang.length === 0) return setShowEmptyWarning(true);
+  // --- LOGIKA BAYAR UTAMA ---
+  const handleBayarClick = () => {
+      if (keranjang.length === 0) return setShowEmptyWarning(true);
+      
+      // Jika Metode QRIS, Tampilkan Modal dulu
+      if (metodePembayaran === 'QRIS') {
+          setShowQrisModal(true);
+      } else {
+          // Jika Cash, langsung eksekusi
+          executeTransaction();
+      }
+  };
+
+  // --- PROSES TRANSAKSI (Dipanggil setelah scan QRIS atau langsung jika Cash) ---
+  const executeTransaction = async () => {
     setIsLoading(true);
+    // Tutup modal QRIS jika terbuka
+    setShowQrisModal(false);
+
     setTimeout(() => {
         const now = new Date();
         const trx: HistoryTransaksi = { 
@@ -324,7 +343,7 @@ const App = () => {
             diskon: nilaiDiskon,
             ppn: nilaiPPN,
             total: totalAkhir,
-            metodePembayaran: metodePembayaran // Simpan Metode Bayar
+            metodePembayaran: metodePembayaran 
         };
         setRiwayat(prev => [trx, ...prev]); 
         setProdukList(prevList => prevList.map(p => { 
@@ -409,7 +428,7 @@ const App = () => {
         @media print { body * { visibility: hidden; } #struk-print, #struk-print * { visibility: visible; } #struk-print { display: block !important; position: absolute; left: 0; top: 0; width: 100%; } @page { margin: 0; size: auto; } }
       `}</style>
 
-      {/* STRUK PRINT (UPDATED) */}
+      {/* STRUK PRINT */}
       <div id="struk-print" className="hidden font-mono text-sm max-w-[80mm] mx-auto bg-white p-4">
         {lastTrx && <div className="text-center">
             <img src={LOGO_URL} alt="Logo" className="w-16 h-16 mx-auto mb-2 object-contain grayscale" />
@@ -417,7 +436,7 @@ const App = () => {
             <p className="text-xs">{lastTrx.tanggal} {lastTrx.waktu}</p>
             <p className="text-xs">No: {lastTrx.id}</p>
             <p className="text-xs">Kasir: {lastTrx.kasir}</p>
-            <p className="text-xs font-bold mt-1">Metode: {lastTrx.metodePembayaran}</p> {/* METODE BAYAR DI STRUK */}
+            <p className="text-xs font-bold mt-1">Metode: {lastTrx.metodePembayaran}</p>
             <hr className="border-dashed border-black my-2"/>
             <div className="text-left">{lastTrx.items.map(i => (<div key={i.id} className="flex justify-between"><span>{i.nama} <span className="text-[10px]"><br/>{i.qty} x {i.hargaEcer.toLocaleString()}</span></span><span>{i.subtotal.toLocaleString()}</span></div>))}</div>
             <hr className="border-dashed border-black my-2"/>
@@ -617,26 +636,52 @@ const App = () => {
                         </div>
                     </div>
 
-                    {/* PILIHAN METODE PEMBAYARAN (BARU) */}
+                    {/* PILIHAN METODE PEMBAYARAN */}
                     <div className="grid grid-cols-2 gap-2 pt-2">
                         <button onClick={() => setMetodePembayaran('Cash')} className={`py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${metodePembayaran === 'Cash' ? 'bg-green-100 text-green-700 border-2 border-green-500' : 'bg-white border border-slate-200 text-slate-500 hover:border-slate-300'}`}>
                             <Banknote size={16}/> Cash
                         </button>
                         <button onClick={() => setMetodePembayaran('QRIS')} className={`py-2 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-all ${metodePembayaran === 'QRIS' ? 'bg-blue-100 text-blue-700 border-2 border-blue-500' : 'bg-white border border-slate-200 text-slate-500 hover:border-slate-300'}`}>
-                            <CreditCard size={16}/> QRIS/TF
+                            <QrCode size={16}/> QRIS/TF
                         </button>
                     </div>
                     
                     <div className="border-t border-dashed border-slate-300 pt-3">
                         <div className="flex justify-between items-end mb-4"><span className="font-bold text-slate-800">Total Akhir</span><span className="font-black text-2xl text-blue-600">Rp {totalAkhir.toLocaleString()}</span></div>
-                        <button onClick={handleBayar} disabled={keranjang.length === 0 || isLoading} className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white py-4 rounded-xl font-black shadow-lg shadow-blue-200 flex justify-center items-center gap-2 transition-all active:scale-95">{isLoading ? 'Memproses...' : 'BAYAR SEKARANG'}</button>
+                        <button onClick={handleBayarClick} disabled={keranjang.length === 0 || isLoading} className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white py-4 rounded-xl font-black shadow-lg shadow-blue-200 flex justify-center items-center gap-2 transition-all active:scale-95">{isLoading ? 'Memproses...' : 'BAYAR SEKARANG'}</button>
                     </div>
                 </div>
             </aside>
         )}
       </div>
 
-      {/* MODALS */}
+      {/* MODAL QRIS PAYMENT (BARU) */}
+      {showQrisModal && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+              <div className="bg-white w-full max-w-sm rounded-[2.5rem] p-8 shadow-2xl animate-pop-in relative overflow-hidden text-center">
+                  <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-400 to-indigo-600"></div>
+                  <h3 className="text-xl font-black text-slate-800 mb-2 mt-2">Scan untuk Bayar</h3>
+                  <p className="text-slate-500 text-sm mb-6">Silakan scan QR Code di bawah ini</p>
+                  
+                  <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 shadow-inner mb-6 inline-block">
+                     {/* GANTI SRC DI BAWAH JIKA INGIN GAMBAR QRIS LAIN */}
+                      <img src={QRIS_IMAGE_URL} alt="QRIS Code" className="w-48 h-48 object-contain mx-auto" />
+                  </div>
+
+                  <div className="bg-blue-50 p-4 rounded-2xl mb-6">
+                      <p className="text-xs text-blue-600 font-bold uppercase mb-1">Total Pembayaran</p>
+                      <p className="text-3xl font-black text-blue-700">Rp {totalAkhir.toLocaleString()}</p>
+                  </div>
+
+                  <div className="flex gap-3">
+                      <button onClick={() => setShowQrisModal(false)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 rounded-xl font-bold transition-colors">Batal</button>
+                      <button onClick={executeTransaction} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold shadow-lg shadow-blue-200 transition-colors">Sudah Masuk</button>
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* MODALS LAINNYA */}
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-white w-full max-w-md rounded-3xl p-8 shadow-2xl animate-pop-in">
@@ -674,7 +719,7 @@ const App = () => {
         </div>
       )}
 
-      {/* MODAL LAINNYA */}
+      {/* NOTIFIKASI KECIL */}
       {showAddUserModal && (<div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"><div className="bg-white w-full max-w-sm rounded-3xl p-8 shadow-2xl animate-pop-in"><h3 className="text-xl font-black text-slate-800 mb-4">Tambah User Baru</h3><div className="space-y-3"><input type="text" placeholder="Nama Lengkap" className="w-full bg-slate-50 border p-3 rounded-xl font-bold outline-none" value={newUser.nama} onChange={e=>setNewUser({...newUser, nama: e.target.value})}/><input type="text" placeholder="Username" className="w-full bg-slate-50 border p-3 rounded-xl font-bold outline-none" value={newUser.username} onChange={e=>setNewUser({...newUser, username: e.target.value})}/><input type="password" placeholder="Password" className="w-full bg-slate-50 border p-3 rounded-xl font-bold outline-none" value={newUser.password} onChange={e=>setNewUser({...newUser, password: e.target.value})}/><select className="w-full bg-slate-50 border p-3 rounded-xl font-bold outline-none" value={newUser.role} onChange={e=>setNewUser({...newUser, role: e.target.value})}><option value="kasir">Kasir</option><option value="admin">Admin</option></select></div><div className="flex gap-3 mt-6"><button onClick={()=>setShowAddUserModal(false)} className="flex-1 bg-slate-100 py-3 rounded-xl font-bold">Batal</button><button onClick={handleAddUser} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold">Simpan</button></div></div></div>)}
       {showPasswordModal && (<div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4"><div className="bg-white w-full max-w-sm rounded-3xl p-8 shadow-2xl animate-pop-in"><h3 className="text-xl font-black text-slate-800 mb-4">Ganti Password</h3><div className="space-y-3"><input type="password" placeholder="Password Lama" className="w-full bg-slate-50 border p-3 rounded-xl font-bold outline-none" value={passForm.oldPass} onChange={e=>setPassForm({...passForm, oldPass: e.target.value})}/><input type="password" placeholder="Password Baru" className="w-full bg-slate-50 border p-3 rounded-xl font-bold outline-none" value={passForm.newPass} onChange={e=>setPassForm({...passForm, newPass: e.target.value})}/><input type="password" placeholder="Konfirmasi Password" className="w-full bg-slate-50 border p-3 rounded-xl font-bold outline-none" value={passForm.confirmPass} onChange={e=>setPassForm({...passForm, confirmPass: e.target.value})}/>{passError && <p className="text-red-500 text-xs font-bold">{passError}</p>}</div><div className="flex gap-3 mt-6"><button onClick={()=>setShowPasswordModal(false)} className="flex-1 bg-slate-100 py-3 rounded-xl font-bold">Batal</button><button onClick={handleChangePassword} className="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold">Simpan</button></div></div></div>)}
       {showEmptyWarning && (<div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50"><div className="bg-white p-6 rounded-2xl shadow-xl max-w-xs text-center animate-pop-in"><AlertTriangle size={48} className="mx-auto text-orange-500 mb-4"/><h3 className="font-bold text-lg mb-2">Keranjang Kosong!</h3><p className="text-slate-500 text-sm mb-6">Silakan pilih produk terlebih dahulu.</p><button onClick={() => setShowEmptyWarning(false)} className="bg-slate-800 text-white px-6 py-2 rounded-xl font-bold w-full">OK</button></div></div>)}
